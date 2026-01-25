@@ -1,0 +1,227 @@
+﻿<Window x:Class="EDCBMonitor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:EDCBMonitor"
+        Title="EDCB Monitor" Height="500" Width="450"
+        WindowStyle="None" ResizeMode="CanResize" AllowsTransparency="True"
+        Background="Transparent" ShowInTaskbar="False"
+        WindowStartupLocation="Manual" 
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
+        PreviewMouseMove="Window_PreviewMouseMove"
+        PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp"
+        PreviewMouseDoubleClick="Window_PreviewMouseDoubleClick">
+    
+    <WindowChrome.WindowChrome>
+        <WindowChrome ResizeBorderThickness="6" CaptionHeight="0" CornerRadius="8" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <ControlTemplate x:Key="HeaderTemplate" TargetType="GridViewColumnHeader">
+            <Grid>
+                <Border Background="{TemplateBinding Background}" 
+                        BorderBrush="{TemplateBinding BorderBrush}" 
+                        BorderThickness="{TemplateBinding BorderThickness}" 
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" 
+                                      SnapsToDevicePixels="True"/>
+                </Border>
+                <Thumb x:Name="PART_HeaderGripper" HorizontalAlignment="Right" Width="4" Margin="0,0,-2,0" Cursor="SizeWE">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border Background="Transparent"/>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+            </Grid>
+        </ControlTemplate>
+        <SolidColorBrush x:Key="ColumnBorderBrush" Color="#444444" />
+        <SolidColorBrush x:Key="ScrollBarBrush" Color="#666666" />
+
+        <Style TargetType="GridViewColumnHeader">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="FontSize" Value="{DynamicResource HeaderFontSize}"/>
+            
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ColumnBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/> 
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Grid>
+                             <Border BorderThickness="{TemplateBinding BorderThickness}" 
+                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                    Background="{TemplateBinding Background}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" 
+                                                  RecognizesAccessKey="True" />
+                            </Border>
+                             <Thumb x:Name="PART_HeaderGripper" HorizontalAlignment="Right" Margin="0,0,-9,0" Style="{StaticResource GridViewColumnHeaderGripper}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <Style x:Key="GridViewColumnHeaderGripper" TargetType="Thumb">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                         <Border Padding="{TemplateBinding Padding}" Background="Transparent">
+                            <Rectangle HorizontalAlignment="Center" Width="1" Fill="Transparent"/>
+                        </Border>
+                     </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#AAAAAA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="Cyan"/>
+                </Trigger>
+             </Style.Triggers>
+        </Style>
+
+        <Style TargetType="{x:Type ScrollBar}">
+            <Setter Property="Stylus.IsFlicksEnabled" Value="false" />
+            <Setter Property="Foreground" Value="{DynamicResource ScrollBarBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Width" Value="6" />
+            <Setter Property="Height" Value="Auto" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid x:Name="GridRoot" Width="6" Background="{TemplateBinding Background}">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true" Focusable="false">
+                                <Track.Thumb>
+                                    <Thumb x:Name="Thumb" Foreground="{TemplateBinding Foreground}">
+                                         <Thumb.Template>
+                                            <ControlTemplate TargetType="{x:Type Thumb}">
+                                                 <Border Background="{TemplateBinding Foreground}" CornerRadius="3"/>
+                                            </ControlTemplate>
+                                         </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter TargetName="GridRoot" Property="Width" Value="Auto" />
+                                <Setter TargetName="GridRoot" Property="Height" Value="6" />
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                             </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+             <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto" />
+                    <Setter Property="Height" Value="6" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Border Name="MainBorder" BorderThickness="1" CornerRadius="8">
+        <Border.Resources>
+             <SolidColorBrush x:Key="RecBrush" Color="#FF5555" />
+             <SolidColorBrush x:Key="DisabledBrush" Color="#777777" />
+             <SolidColorBrush x:Key="ColumnBorderBrush" Color="#444444" />
+             
+             <FontWeight x:Key="RecWeight">Bold</FontWeight>
+
+             <Style x:Key="HiddenHeaderStyle" TargetType="{x:Type GridViewColumnHeader}">
+                 <Setter Property="Visibility" Value="Collapsed" />
+             </Style>
+
+             <Style x:Key="ReservationItemStyle" TargetType="ListViewItem">
+                 <Setter Property="Background" Value="Transparent" />
+                 
+                 <Setter Property="BorderThickness" Value="0,0,1,1" /> 
+                 <Setter Property="BorderBrush" Value="{DynamicResource ColumnBorderBrush}" />
+                 
+                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                 
+                 <EventSetter Event="MouseDoubleClick" Handler="listView_MouseDoubleClick"/>
+
+                 <Style.Triggers>
+                    <DataTrigger Binding="{Binding HasError}" Value="True">
+                        <Setter Property="Background" Value="{Binding Source={x:Static local:Config.Data}, Path=ReserveErrorColor}" />
+                    </DataTrigger>
+
+                    <DataTrigger Binding="{Binding IsDisabled}" Value="True">
+                        <Setter Property="Foreground" Value="{DynamicResource DisabledBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsRecording}" Value="True">
+                        <Setter Property="FontWeight" Value="{DynamicResource RecWeight}" />
+                        <Setter Property="Foreground" Value="{DynamicResource RecBrush}" />
+                    </DataTrigger>
+           
+                    <Trigger Property="IsSelected" Value="True">
+                         <Setter Property="Background" Value="Transparent" />
+                    </Trigger>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#33FFFFFF" />
+                    </Trigger>
+                 </Style.Triggers>
+             </Style>
+        </Border.Resources>
+
+        <Border.ContextMenu>
+           <ContextMenu Opened="ContextMenu_Opened">
+                <MenuItem Header="予約←→無効" Click="MenuChgOnOff_Click"/>
+                <MenuItem Header="削除" Click="MenuDel_Click"/> 
+                <Separator/>
+                <MenuItem Name="MenuItemHideDisabled" Header="無効予約を隠す" Click="MenuHideDisabled_Click"/>
+                <Separator/>
+                <MenuItem Header="再読み込み" Click="MenuReload_Click"/>
+                <MenuItem Header="設定..." Click="MenuSettings_Click"/>
+                <MenuItem Header="終了" Click="MenuExit_Click"/>
+            </ContextMenu>
+        </Border.ContextMenu>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" Name="RowHeader"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto" Name="RowFooter"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="10,5,10,5" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                 </Grid.ColumnDefinitions>
+                <TextBlock Name="HeaderTitle" Text="EDCB Monitor" Foreground="#00AAFF" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                 <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Name="BtnSettings" Content="⚙" Style="{StaticResource IconBtn}" Click="MenuSettings_Click" Margin="0,0,5,0"/>
+                    <Button Name="BtnClose" Content="✕" Style="{StaticResource IconBtn}" Foreground="#FF6666" Click="MenuExit_Click"/>
+                </StackPanel>
+            </Grid>
+
+            <ListView Name="LstReservations" Grid.Row="1" Background="Transparent" BorderThickness="0" Foreground="#EEEEEE" 
+                      Margin="10,0,0,0" Padding="0">
+                <ListView.View>
+                    <GridView x:Name="MainGridView">
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <Grid Grid.Row="2" Margin="10,0,10,5">
+                <TextBlock Name="LblStatus" Text="初期化中..." Foreground="#888888" FontSize="11"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
