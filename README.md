@@ -1,4 +1,4 @@
-<span style="font-size: 12px;">
+<span style="font-size: 10px;">
 ■ 概要
 EDCB (EpgDataCap_Bon) の予約状況を確認・モニタリングするためのツールです。
 
