@@ -26,7 +26,7 @@ EDCB (EpgDataCap_Bon) の予約状況を確認・モニタリングするため�
 * ファイルサイズは大きくなります。
 
 
-2. **通常版 / 軽量版 (Framework-dependent)**
+2. **軽量版 (Framework-dependent)**
 * 実行には **[.NET Desktop Runtime 8.0 (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** のインストールが必要です。
 * すでに環境にランタイムが入っている場合は、こちらの方がファイルサイズが小さく軽量です。
 
