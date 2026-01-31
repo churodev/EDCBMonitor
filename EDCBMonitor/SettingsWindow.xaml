@@ -91,16 +91,13 @@
                             <Border Background="#333337" CornerRadius="3" Padding="15,8" Margin="0,0,0,12">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
-                                    <TextBlock Text="Reserve.txt のパス" Foreground="#BBB" FontSize="11" Margin="0,0,0,2"/>
-                                    <TextBox Grid.Row="1" Grid.Column="0" Name="TxtPath" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="24" VerticalContentAlignment="Center" Padding="4,0" TextChanged="Interact_Changed"/>
-                                    <Button Grid.Row="1" Grid.Column="1" Name="BtnBrowse" Content="..." Width="30" Height="24" Margin="8,0,0,0" Background="#444" Foreground="White" BorderThickness="0" Click="BtnBrowse_Click"/>
+                                    <TextBlock Grid.Column="0" Text="Reserve.txt のパス" Foreground="#BBB" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBox Grid.Column="1" Name="TxtPath" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="24" VerticalContentAlignment="Center" Padding="4,0" TextChanged="Interact_Changed"/>
+                                    <Button Grid.Column="2" Name="BtnBrowse" Content="..." Width="30" Height="24" Margin="8,0,0,0" Background="#444" Foreground="White" BorderThickness="0" Click="BtnBrowse_Click"/>
                                 </Grid>
                             </Border>
 
@@ -130,17 +127,25 @@
                             </Border>
 
                             <TextBlock Text="番組名整形" Foreground="#88CCFF" Margin="0,0,0,4"/>
-                            <Border Background="#333337" CornerRadius="3" Padding="15,8">
+                            <Border Background="#333337" CornerRadius="3" Padding="15,8" Margin="0,0,0,12">
                                 <StackPanel>
                                     <CheckBox Name="ChkEnableTitleRemove" Content="正規表現による文字削除を有効にする" Foreground="White" Margin="0,0,0,4" Click="DataSetting_Changed"/>
-                                    <TextBlock Text="削除パターン (正規表現)" Foreground="#BBB" FontSize="11" Margin="0,0,0,2"/>
                                     <TextBox Name="TxtTitleRemovePattern" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="24" VerticalContentAlignment="Center" TextChanged="DataSetting_Changed"/>
                                     <CheckBox Name="ChkHideDisabled" Content="無効な予約を表示しない" Foreground="White" Margin="0,10,0,0" Click="DataSetting_Changed"/>
                                     <CheckBox Name="ChkRecBold" Content="録画中の行を太字にする" Foreground="White" Margin="0,6,0,0" Click="Interact_Changed"/>
                                 </StackPanel>
                             </Border>
+
+                            <TextBlock Text="ツールチップ設定" Foreground="#88CCFF" Margin="0,0,0,4"/>
+                        <Border Background="#333337" CornerRadius="3" Padding="15,8">
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox Name="ChkShowToolTip" Content="詳細情報のツールチップを表示する" Foreground="White" VerticalAlignment="Center" Margin="0,0,20,0" Click="Interact_Changed"/>
+                                <TextBlock Text="ツールチップの幅" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                <TextBox Name="TxtToolTipWidth" Width="50" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                            </StackPanel>
+                        </Border>
                         </StackPanel>
-                    </ScrollViewer>
+                        </ScrollViewer>
                 </TabItem>
 
                 <TabItem Header="表示・配色">
@@ -175,7 +180,11 @@
                                             <ColumnDefinition Width="10"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="40"/>
-                                        </Grid.ColumnDefinitions>
+                                            
+                                            <ColumnDefinition Width="10"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="40"/>
+                                            </Grid.ColumnDefinitions>
                                         
                                         <TextBlock Grid.Column="0" Text="本体" Foreground="#BBB" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                         <TextBox Grid.Column="1" Name="TxtFontSize" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="24" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
@@ -185,7 +194,10 @@
 
                                         <TextBlock Grid.Column="6" Text="フッター" Foreground="#BBB" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                         <TextBox Grid.Column="7" Name="TxtFooterFontSize" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="24" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
-                                    </Grid>
+
+                                        <TextBlock Grid.Column="9" Text="ツールチップ" Foreground="#BBB" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                        <TextBox Grid.Column="10" Name="TxtToolTipFontSize" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="24" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                                        </Grid>
 
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="行間 (上下)" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,15,4"/>
                                     <Grid Grid.Row="2" Grid.Column="1" Margin="0,0,0,4">
@@ -249,7 +261,9 @@
                                         <RowDefinition Height="28"/>
                                         <RowDefinition Height="28"/>
                                         <RowDefinition Height="28"/>
-                                    </Grid.RowDefinitions>
+                                        <RowDefinition Height="28"/>
+                                        <RowDefinition Height="28"/>
+                                        </Grid.RowDefinitions>
 
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="背景色" Foreground="#BBB" VerticalAlignment="Center"/>
                                     <TextBox Grid.Row="0" Grid.Column="1" Name="TxtBgColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
@@ -267,6 +281,14 @@
                                     <TextBox Grid.Row="3" Grid.Column="1" Name="TxtFooterColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
                                     <Button Grid.Row="3" Grid.Column="2" Content="🎨" Click="BtnPickFooter_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
 
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="進捗バー" Foreground="#BBB" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Row="4" Grid.Column="1" Name="TxtProgressBarColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                                    <Button Grid.Row="4" Grid.Column="2" Content="🎨" Click="BtnPickProgressBar_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="エラー" Foreground="#BBB" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Row="5" Grid.Column="1" Name="TxtErrorColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                                    <Button Grid.Row="5" Grid.Column="2" Content="🎨" Click="BtnPickError_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+
                                     <TextBlock Grid.Row="0" Grid.Column="4" Text="通常文字" Foreground="#BBB" VerticalAlignment="Center"/>
                                     <TextBox Grid.Row="0" Grid.Column="5" Name="TxtFgColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
                                     <Button Grid.Row="0" Grid.Column="6" Content="🎨" Click="BtnPickFg_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
@@ -278,11 +300,19 @@
                                     <TextBlock Grid.Row="2" Grid.Column="4" Text="無効" Foreground="#BBB" VerticalAlignment="Center"/>
                                     <TextBox Grid.Row="2" Grid.Column="5" Name="TxtDisabledColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
                                     <Button Grid.Row="2" Grid.Column="6" Content="🎨" Click="BtnPickDisabled_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+                                    
+                                    <TextBlock Grid.Row="3" Grid.Column="4" Text="Tチップ文字" Foreground="#BBB" VerticalAlignment="Center" FontSize="11"/>
+                                    <TextBox Grid.Row="3" Grid.Column="5" Name="TxtToolTipFgColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                                    <Button Grid.Row="3" Grid.Column="6" Content="🎨" Click="BtnPickToolTipFg_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
 
-                                    <TextBlock Grid.Row="3" Grid.Column="4" Text="エラー" Foreground="#BBB" VerticalAlignment="Center"/>
-                                    <TextBox Grid.Row="3" Grid.Column="5" Name="TxtErrorColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
-                                    <Button Grid.Row="3" Grid.Column="6" Content="🎨" Click="BtnPickError_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
-                                </Grid>
+                                    <TextBlock Grid.Row="4" Grid.Column="4" Text="Tチップ背景" Foreground="#BBB" VerticalAlignment="Center" FontSize="11"/>
+                                    <TextBox Grid.Row="4" Grid.Column="5" Name="TxtToolTipBgColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                                    <Button Grid.Row="4" Grid.Column="6" Content="🎨" Click="BtnPickToolTipBg_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+
+                                    <TextBlock Grid.Row="5" Grid.Column="4" Text="Tチップ枠線" Foreground="#BBB" VerticalAlignment="Center" FontSize="11"/>
+                                    <TextBox Grid.Row="5" Grid.Column="5" Name="TxtToolTipBorderColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                                    <Button Grid.Row="5" Grid.Column="6" Content="🎨" Click="BtnPickToolTipBorder_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+                                    </Grid>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
@@ -297,6 +327,16 @@
                                     <CheckBox Name="ChkShowHeader" Content="ヘッダー" Foreground="White" Margin="0,0,20,0" Click="Interact_Changed"/>
                                     <CheckBox Name="ChkShowListHeader" Content="リスト見出し" Foreground="White" Margin="0,0,20,0" Click="Interact_Changed"/>
                                     <CheckBox Name="ChkShowFooter" Content="フッター" Foreground="White" Click="Interact_Changed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="日時表示で省略する" Foreground="#88CCFF" Margin="0,4,0,4"/>
+                            <Border Background="#333337" CornerRadius="3" Padding="15,8" Margin="0,0,0,12">
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox Name="ChkOmitYear" Content="年" Foreground="White" Margin="0,0,15,0" Click="DataSetting_Changed"/>
+                                    <CheckBox Name="ChkOmitMonth" Content="月" Foreground="White" Margin="0,0,15,0" Click="DataSetting_Changed"/>
+                                    <CheckBox Name="ChkOmitEndTime" Content="終了時刻" Foreground="White" Margin="0,0,15,0" Click="DataSetting_Changed"/>
+                                    <CheckBox Name="ChkOmitProgress" Content="進捗バー" Foreground="White" Click="DataSetting_Changed"/>
                                 </StackPanel>
                             </Border>
 
@@ -357,8 +397,8 @@
              </TabControl>
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-                <Button Content="保存" Width="90" Height="28" Margin="0,0,10,0" Background="#88CCFF" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnSave_Click"/>
-                <Button Content="キャンセル" Width="80" Height="28" Background="#3E3E42" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnCancel_Click"/>
+                <Button Content="保存" Width="100" Height="30" Margin="0,0,10,0" Background="#007ACC" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnSave_Click"/>
+                <Button Content="キャンセル" Width="100" Height="30" Background="#3E3E42" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnCancel_Click"/>
             </StackPanel>
         </Grid>
     </Border>

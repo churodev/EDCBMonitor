@@ -1,5 +1,4 @@
-﻿#nullable disable
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -86,7 +85,7 @@ namespace EDCBMonitor
             _updateTimer.Tick += async (s, e) => 
             {
                 bool success = await UpdateReservations();
-                _updateTimer.Interval = TimeSpan.FromSeconds(success ? 60 : 2);
+                _updateTimer.Interval = TimeSpan.FromSeconds(success ? 60 : 5);
             };
             _updateTimer.Start();
 
@@ -255,10 +254,14 @@ namespace EDCBMonitor
             while (obj != null)
             {
                 if (obj is ButtonBase || obj is Thumb || obj is TextBox) return;
-                if (obj is ListViewItem) break;
+                if (obj is ListViewItem)
+                {
+                    ActivateOrLaunchEpgTimer();
+                    e.Handled = true;
+                    return;
+                }
                 obj = VisualTreeHelper.GetParent(obj);
             }
-
             ActivateOrLaunchEpgTimer();
         }
         
@@ -544,9 +547,53 @@ namespace EDCBMonitor
                     Config.Data.ListMarginRight, 
                     Config.Data.ListMarginBottom
                 );
+                
+                // ツールチップのスタイル設定（幅固定・折り返し・配色）
+                var toolTipStyle = new Style(typeof(System.Windows.Controls.ToolTip));
+                toolTipStyle.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, Config.Data.ToolTipWidth));
+                
+                try
+                {
+                    toolTipStyle.Setters.Add(new Setter(Control.FontSizeProperty, Config.Data.ToolTipFontSize));
+
+                    var bgObj = brushConverter.ConvertFromString(Config.Data.ToolTipBackColor);
+                    if (bgObj is SolidColorBrush ttBgBrush)
+                        toolTipStyle.Setters.Add(new Setter(Control.BackgroundProperty, ttBgBrush));
+
+                    var fgObj = brushConverter.ConvertFromString(Config.Data.ToolTipForeColor);
+                    if (fgObj is SolidColorBrush ttFgBrush)
+                        toolTipStyle.Setters.Add(new Setter(Control.ForegroundProperty, ttFgBrush));
+
+                    var borderObj = brushConverter.ConvertFromString(Config.Data.ToolTipBorderColor);
+                    if (borderObj is SolidColorBrush ttBorderBrush)
+                        toolTipStyle.Setters.Add(new Setter(Control.BorderBrushProperty, ttBorderBrush));
+                }
+                catch 
+                {
+                    // デフォルトフォールバック（設定読み込み失敗時）
+                    toolTipStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Color.FromRgb(30, 30, 30))));
+                    toolTipStyle.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.White));
+                    toolTipStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(100, 100, 100))));
+                }
+                
+                // テキストの折り返し設定
+                var ttTemplate = new DataTemplate();
+                var ttText = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+                ttText.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new Binding());
+                ttText.SetValue(System.Windows.Controls.TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+                ttTemplate.VisualTree = ttText;
+                
+                toolTipStyle.Setters.Add(new Setter(ContentControl.ContentTemplateProperty, ttTemplate));
+                
+                // ウィンドウのリソースとして登録
+                this.Resources[typeof(System.Windows.Controls.ToolTip)] = toolTipStyle;
 
                 var itemStyle = new Style(typeof(ListViewItem));
                 itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
+                if (Config.Data.ShowToolTip)
+                {
+                    itemStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding("ToolTipText")));
+                }
                 itemStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
                 itemStyle.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(-1, 0, 0, 0)));
                 itemStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
@@ -667,6 +714,7 @@ namespace EDCBMonitor
                     if (d != null && d.GetShow())
                     {
                         if (d.Header == "有効") AddCheckBoxColumn(gv, d);
+                        else if (d.Header == "日時") AddDateTimeColumn(gv, d);
                         else AddColumn(gv, d);
                     }
                 }
@@ -676,6 +724,7 @@ namespace EDCBMonitor
                     if (d.GetShow() && !Config.Data.ColumnHeaderOrder.Contains(d.Header))
                     {
                         if (d.Header == "有効") AddCheckBoxColumn(gv, d);
+                        else if (d.Header == "日時") AddDateTimeColumn(gv, d);
                         else AddColumn(gv, d);
                     }
                 }
@@ -687,6 +736,7 @@ namespace EDCBMonitor
                     if (d.GetShow())
                     {
                         if (d.Header == "有効") AddCheckBoxColumn(gv, d);
+                        else if (d.Header == "日時") AddDateTimeColumn(gv, d);
                         else AddColumn(gv, d);
                     }
                 }
@@ -729,6 +779,65 @@ namespace EDCBMonitor
             col.CellTemplate = dataTemplate;
             gv.Columns.Add(col);
         }
+        
+        private void AddDateTimeColumn(GridView gv, ColumnDef d)
+        {
+            var col = new GridViewColumn();
+            col.Header = d.Header;
+            col.Width = d.GetWidth();
+
+            var dataTemplate = new DataTemplate();
+            var gridFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Grid));
+
+            // 「進捗バーを省略」していない場合のみバーを追加
+            if (!Config.Data.OmitProgress)
+            {
+                var progressFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.ProgressBar));
+                progressFactory.SetBinding(System.Windows.Controls.Primitives.RangeBase.ValueProperty, new Binding("ProgressValue"));
+                progressFactory.SetValue(System.Windows.Controls.ProgressBar.MinimumProperty, 0.0);
+                progressFactory.SetValue(System.Windows.Controls.ProgressBar.MaximumProperty, 100.0);
+                
+                // デザイン調整（枠なし）
+                progressFactory.SetValue(Control.BorderThicknessProperty, new Thickness(0));
+                progressFactory.SetValue(Control.BackgroundProperty, Brushes.Transparent);
+                
+                try
+                {
+                    // 設定された色をそのまま適用（不透明）
+                    var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(Config.Data.ProgressBarColor);
+                    var brush = new SolidColorBrush(color);
+                    progressFactory.SetValue(Control.ForegroundProperty, brush);
+                }
+                catch
+                {
+                    // パース失敗時のデフォルト色（緑）
+                    progressFactory.SetValue(Control.ForegroundProperty, new SolidColorBrush(System.Windows.Media.Color.FromArgb(255, 0, 255, 0)));
+                }
+
+                progressFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(1, 0, -6, 0));
+                progressFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Stretch);
+                progressFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Stretch);
+                
+                // 下約20%の高さになるように変形
+                progressFactory.SetValue(UIElement.RenderTransformOriginProperty, new Point(0.5, 1.0));
+                progressFactory.SetValue(UIElement.RenderTransformProperty, new System.Windows.Media.ScaleTransform(1.0, 0.20));
+                
+                gridFactory.AppendChild(progressFactory);
+            }
+
+            // テキスト表示（前面）
+            var textFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+            textFactory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new Binding(d.BindingPath));
+            textFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(2, Config.Data.ItemPadding, -6, Config.Data.ItemPadding));
+            
+            textFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+            
+            gridFactory.AppendChild(textFactory);
+
+            dataTemplate.VisualTree = gridFactory;
+            col.CellTemplate = dataTemplate;
+            gv.Columns.Add(col);
+        }
 
         // --- ロジックを統合したチェックボックス処理 ---
         private async void ReservationCheckBox_Click(object sender, RoutedEventArgs e)
@@ -739,7 +848,6 @@ namespace EDCBMonitor
                 bool isChecked = cb.IsChecked == true;
                 uint id = item.ID;
 
-                // チェックON = 有効化したい、OFF = 無効化したい
                 bool success = await ChangeReservationStatus(id, isChecked);
                 
                 if (success) await UpdateReservations();
@@ -969,7 +1077,7 @@ namespace EDCBMonitor
                 }
 
                 LstReservations.ItemsSource = list;
-                LblStatus.Text = string.Format("更新: {0:HH:mm:ss} ({1}件)", DateTime.Now, list.Count);
+                LblStatus.Text = string.Format("更新: {0:HH:mm} ({1}件)", DateTime.Now, list.Count);
                 return true;
             }
             catch (Exception ex)
@@ -1071,20 +1179,16 @@ namespace EDCBMonitor
                                byte current = data.RecSetting.RecMode;
                                byte next;
 
-                               // モード循環（回転）ロジック
                                if (current <= 4) 
                                {
-                                   // 有効 -> 無効 (1->5, 2->6...)
                                    next = (byte)(5 + (current + 4) % 5);
                                }
                                else if (current <= 9) 
                                {
-                                   // 無効 -> 有効 (5->1, 6->2...)
                                     next = (byte)((current + 1) % 5);
                                }
                                else 
                                {
-                                   // その他 -> 指定
                                    next = 1; 
                                }
 

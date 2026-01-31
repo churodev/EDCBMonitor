@@ -1,5 +1,4 @@
-﻿#nullable disable
-using System;
+﻿using System;
 using System.IO;
 using System.Text;
 using System.Xml.Serialization;
@@ -66,6 +65,7 @@ namespace EDCBMonitor
             TxtColumnBorderColor.Text = Config.Data.ColumnBorderColor;
             TxtFooterColor.Text = Config.Data.FooterColor;
             TxtErrorColor.Text = Config.Data.ReserveErrorColor;
+            TxtProgressBarColor.Text = Config.Data.ProgressBarColor;
             TxtFontSize.Text = Config.Data.FontSize.ToString();
             TxtHeaderFontSize.Text = Config.Data.HeaderFontSize.ToString();
             TxtFooterFontSize.Text = Config.Data.FooterFontSize.ToString();
@@ -75,6 +75,13 @@ namespace EDCBMonitor
             SldMarginTop.Value = Config.Data.ListMarginTop;
             SldMarginRight.Value = Config.Data.ListMarginRight;
             SldMarginBottom.Value = Config.Data.ListMarginBottom;
+
+            TxtToolTipFontSize.Text = Config.Data.ToolTipFontSize.ToString();
+            TxtToolTipBgColor.Text = Config.Data.ToolTipBackColor;
+            TxtToolTipFgColor.Text = Config.Data.ToolTipForeColor;
+            TxtToolTipBorderColor.Text = Config.Data.ToolTipBorderColor;
+            ChkShowToolTip.IsChecked = Config.Data.ShowToolTip;
+            TxtToolTipWidth.Text = Config.Data.ToolTipWidth.ToString();
 
             ChkEnableTitleRemove.IsChecked = Config.Data.EnableTitleRemove;
             TxtTitleRemovePattern.Text = Config.Data.TitleRemovePattern;
@@ -91,6 +98,11 @@ namespace EDCBMonitor
             ChkShowHeader.IsChecked = Config.Data.ShowHeader;
             ChkShowListHeader.IsChecked = Config.Data.ShowListHeader;
             ChkShowFooter.IsChecked = Config.Data.ShowFooter;
+            
+            ChkOmitYear.IsChecked = Config.Data.OmitYear;
+            ChkOmitMonth.IsChecked = Config.Data.OmitMonth;
+            ChkOmitEndTime.IsChecked = Config.Data.OmitEndTime;
+            ChkOmitProgress.IsChecked = Config.Data.OmitProgress;
 
             // 31項目のカラム設定ロード
             ChkColStatus.IsChecked = Config.Data.ShowColStatus;
@@ -142,7 +154,7 @@ namespace EDCBMonitor
             Config.Data.ColumnBorderColor = TxtColumnBorderColor.Text;
             Config.Data.FooterColor = TxtFooterColor.Text;
             Config.Data.ReserveErrorColor = TxtErrorColor.Text;
-            
+            Config.Data.ProgressBarColor = TxtProgressBarColor.Text;
             Config.Data.EnableTitleRemove = ChkEnableTitleRemove.IsChecked == true;
             Config.Data.TitleRemovePattern = TxtTitleRemovePattern.Text;
             
@@ -159,9 +171,21 @@ namespace EDCBMonitor
             Config.Data.ListMarginRight = SldMarginRight.Value;
             Config.Data.ListMarginBottom = SldMarginBottom.Value;
 
+            if (double.TryParse(TxtToolTipFontSize.Text, out double tfs)) Config.Data.ToolTipFontSize = tfs;
+            Config.Data.ToolTipBackColor = TxtToolTipBgColor.Text;
+            Config.Data.ToolTipForeColor = TxtToolTipFgColor.Text;
+            Config.Data.ToolTipBorderColor = TxtToolTipBorderColor.Text;
+            Config.Data.ShowToolTip = ChkShowToolTip.IsChecked == true;
+            if (double.TryParse(TxtToolTipWidth.Text, out double ttw)) Config.Data.ToolTipWidth = ttw;
+
             Config.Data.ShowHeader = ChkShowHeader.IsChecked == true;
             Config.Data.ShowListHeader = ChkShowListHeader.IsChecked == true;
             Config.Data.ShowFooter = ChkShowFooter.IsChecked == true;
+            
+            Config.Data.OmitYear = ChkOmitYear.IsChecked == true;
+            Config.Data.OmitMonth = ChkOmitMonth.IsChecked == true;
+            Config.Data.OmitEndTime = ChkOmitEndTime.IsChecked == true;
+            Config.Data.OmitProgress = ChkOmitProgress.IsChecked == true;
 
             // 31項目のカラム設定適用
             Config.Data.ShowColStatus = ChkColStatus.IsChecked == true;
@@ -262,6 +286,9 @@ namespace EDCBMonitor
             TxtColumnBorderColor.Text = "#808080"; 
             
             TxtFooterColor.Text = "#888888";
+            TxtToolTipBgColor.Text = "#F2F2F2";
+            TxtToolTipFgColor.Text = "#000000";
+            TxtToolTipBorderColor.Text = "#767676";
             UpdatePreview(false);
         }
 
@@ -274,6 +301,9 @@ namespace EDCBMonitor
             TxtColumnBorderColor.Text = "#8C8C8C"; 
             
             TxtFooterColor.Text = "#ACACAC";
+            TxtToolTipBgColor.Text = "#FFFFE1"; 
+            TxtToolTipFgColor.Text = "#000000";
+            TxtToolTipBorderColor.Text = "#7A7A7A";
             UpdatePreview(false);
         }
 
@@ -296,5 +326,10 @@ namespace EDCBMonitor
         private void BtnPickColumnBorder_Click(object sender, RoutedEventArgs e) => PickColor(TxtColumnBorderColor);
         private void BtnPickFooter_Click(object sender, RoutedEventArgs e) => PickColor(TxtFooterColor);
         private void BtnPickError_Click(object sender, RoutedEventArgs e) => PickColor(TxtErrorColor);
+        private void BtnPickProgressBar_Click(object sender, RoutedEventArgs e) => PickColor(TxtProgressBarColor);
+
+        private void BtnPickToolTipBg_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipBgColor);
+        private void BtnPickToolTipFg_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipFgColor);
+        private void BtnPickToolTipBorder_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipBorderColor);
     }
 }

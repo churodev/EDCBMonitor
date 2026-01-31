@@ -22,6 +22,7 @@ namespace EDCBMonitor
         private string _recColor = "#FF5555";
         public string ReserveErrorColor { get; set; } = "#C85D5A";
         private string _disabledColor = "#777777";
+        private string _progressBarColor = "#0064C8";
         private string _columnBorderColor = "#808080";
         private string _footerColor = "#888888";
         private bool _recBold = true;
@@ -36,6 +37,13 @@ namespace EDCBMonitor
         private double _listMarginRight = 0;
         private double _listMarginBottom = 0;
 
+        private double _toolTipFontSize = 12.0;
+        private string _toolTipBackColor = "#F2F2F2";
+        private string _toolTipForeColor = "#000000";
+        private string _toolTipBorderColor = "#767676";
+        private bool _showToolTip = true;
+        private double _toolTipWidth = 500.0;
+
         private bool _enableTitleRemove = true;
         private string _titleRemovePattern = @"[\[\(【](SS|無料|[字デ解二無多映])[\]\)】]";
 
@@ -45,15 +53,15 @@ namespace EDCBMonitor
 
         public double Top { get; set; } = -10000;
         public double Left { get; set; } = -10000;
-        public double Width { get; set; } = 715;
+        public double Width { get; set; } = 730;
         public double Height { get; set; } = 500;
         
         public List<string> ColumnHeaderOrder { get; set; } = new List<string>();
 
         // EDCB全31項目フラグ
-        public bool ShowColID { get; set; } = false;
         public bool ShowColStatus { get; set; } = false;
         public bool ShowColDateTime { get; set; } = true;
+        public bool OmitProgress { get; set; } = false;
         public bool ShowColDuration { get; set; } = true;
         public bool ShowColNetwork { get; set; } = false;
         public bool ShowColServiceName { get; set; } = true;
@@ -82,15 +90,19 @@ namespace EDCBMonitor
         public bool ShowColRecFolder { get; set; } = false;
         public bool ShowColStartMargin { get; set; } = false;
         public bool ShowColEndMargin { get; set; } = false;
+        public bool OmitYear { get; set; } = true;
+        public bool OmitMonth { get; set; } = false;
+        public bool OmitEndTime { get; set; } = false;
+        public bool ShowColID { get; set; } = false;
 
         // EDCB全31項目幅
         public double WidthColID { get; set; } = 50;
         public double WidthColStatus { get; set; } = 60;
-        public double WidthColDateTime { get; set; } = 130;
+        public double WidthColDateTime { get; set; } = 132;
         public double WidthColDuration { get; set; } = 31;
         public double WidthColNetwork { get; set; } = 70;
         public double WidthColServiceName { get; set; } = 70;
-        public double WidthColTitle { get; set; } = 450;
+        public double WidthColTitle { get; set; } = 460;
         public double WidthColDesc { get; set; } = 150;
         public double WidthColGenre { get; set; } = 80;
         public double WidthColExtraInfo { get; set; } = 100;
@@ -125,6 +137,7 @@ namespace EDCBMonitor
         public string ForegroundColor { get => _foregroundColor; set => SetProperty(ref _foregroundColor, value); }
         public string RecColor { get => _recColor; set => SetProperty(ref _recColor, value); }
         public string DisabledColor { get => _disabledColor; set => SetProperty(ref _disabledColor, value); }
+        public string ProgressBarColor { get => _progressBarColor; set => SetProperty(ref _progressBarColor, value); }
         public bool RecBold { get => _recBold; set => SetProperty(ref _recBold, value); }
         public string FontFamily { get => _fontFamily; set => SetProperty(ref _fontFamily, value); }
         public double FontSize { get => _fontSize; set => SetProperty(ref _fontSize, value); }
@@ -138,6 +151,13 @@ namespace EDCBMonitor
         public double ListMarginBottom { get => _listMarginBottom; set { if (SetProperty(ref _listMarginBottom, value)) OnPropertyChanged(nameof(ListMargin)); } }
         
         [XmlIgnore] public Thickness ListMargin => new Thickness(_listMarginLeft, _listMarginTop, _listMarginRight, _listMarginBottom);
+
+        public double ToolTipFontSize { get => _toolTipFontSize; set => SetProperty(ref _toolTipFontSize, value); }
+        public string ToolTipBackColor { get => _toolTipBackColor; set => SetProperty(ref _toolTipBackColor, value); }
+        public string ToolTipForeColor { get => _toolTipForeColor; set => SetProperty(ref _toolTipForeColor, value); }
+        public string ToolTipBorderColor { get => _toolTipBorderColor; set => SetProperty(ref _toolTipBorderColor, value); }
+        public bool ShowToolTip { get => _showToolTip; set => SetProperty(ref _showToolTip, value); }
+        public double ToolTipWidth { get => _toolTipWidth; set => SetProperty(ref _toolTipWidth, value); }
 
         public bool EnableTitleRemove { get => _enableTitleRemove; set => SetProperty(ref _enableTitleRemove, value); }
         public string TitleRemovePattern { get => _titleRemovePattern; set => SetProperty(ref _titleRemovePattern, value); }
@@ -164,7 +184,7 @@ namespace EDCBMonitor
     public static class Config
     {
         public static ConfigData Data { get; set; } = new ConfigData();
-        private static string ConfigPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config.xml");
+        private static string ConfigPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "EM_Config.xml");
 
         public static void Load()
         {
@@ -177,31 +197,18 @@ namespace EDCBMonitor
             {
                 string path = ConfigPath;
                 string tempPath = path + ".tmp";
-
-                // 一時ファイル(.tmp)に書き込む
                 var serializer = new XmlSerializer(typeof(ConfigData));
-                
-                // FileStreamを使って確実にディスクへ書き出す
                 using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
                 {
                     serializer.Serialize(sw, Data);
                     sw.Flush();
-                    fs.Flush(true); // ディスクバッファへフラッシュ
+                    fs.Flush(true);
                 }
-
-                // 一時ファイルの書き込みに成功したら元のファイルを削除して差し替える
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
+                if (File.Exists(path)) File.Delete(path);
                 File.Move(tempPath, path);
             }
-            catch (Exception ex)
-            {
-                // エラー時はログに残す（もしLoggerがなければ catch { } だけでも可）
-                try { Logger.Write("設定保存エラー: " + ex.Message); } catch { }
-            }
+            catch (Exception ex) { try { Logger.Write("設定保存エラー: " + ex.Message); } catch { } }
         }
     }
 }

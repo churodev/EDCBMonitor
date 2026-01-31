@@ -17,6 +17,7 @@ namespace EDCBMonitor
         public ushort EventID { get; set; } 
         public string StartTime { get; set; }
         public string DateTimeInfo { get; set; } = "";
+        public double ProgressValue { get; set; }
         public string Duration { get; set; } = "";
         public string NetworkName { get; set; } = "";
         public string ServiceName { get; set; } = "";
@@ -46,7 +47,7 @@ namespace EDCBMonitor
         public string RecFolder { get; set; } = "";
         public string StartMargin { get; set; } = "";
         public string EndMargin { get; set; } = "";
-
+        public string ToolTipText { get; set; } = "";
         public bool IsEnabledBool { get; set; }
         public DateTime StartTimeRaw { get; set; }
         public bool IsRecording { get; set; }
@@ -353,7 +354,6 @@ namespace EDCBMonitor
 
                 uint keyFull = ((uint)data.content_nibble_level_1 << 24) | ((uint)data.content_nibble_level_2 << 16) | ((uint)data.user_nibble_1 << 8) | data.user_nibble_2;
                 
-                // 変更: GenreDict -> GenreDefinition.Map
                 if (GenreDefinition.Map.ContainsKey(keyFull))
                 {
                     list.Add(GenreDefinition.Map[keyFull]);
@@ -423,7 +423,26 @@ namespace EDCBMonitor
 
                     if (Config.Data.HideDisabled && isDisabled) continue;
 
-                    string dateTimeInfo = $"{r.StartTime:MM/dd(ddd) HH:mm}～{endTime:HH:mm}";
+                    // 日時フォーマットの構築
+                    string dateFmt = "";
+                    if (!Config.Data.OmitYear) dateFmt += "yyyy/";
+                    if (!Config.Data.OmitMonth) dateFmt += "MM/";
+                    dateFmt += "dd(ddd) HH:mm";
+
+                    // 開始時刻の文字列化
+                    string startStr = r.StartTime.ToString(dateFmt);
+
+                    // 終了時刻の追加判定
+                    string dateTimeInfo;
+                    if (Config.Data.OmitEndTime)
+                    {
+                        dateTimeInfo = startStr;
+                    }
+                    else
+                    {
+                        dateTimeInfo = $"{startStr}～{endTime:HH:mm}";
+                    }
+                    
                     string recMode="", priority="", tuijyuu="", pittari="", tunerForce="", tunerAppointed="", recEndMode="", reboot="", bat="", tag="", folder="", startMargin="", endMargin="", estSize="", presetName="";
 
                     if (r.RecSetting != null)
@@ -518,6 +537,7 @@ namespace EDCBMonitor
                     string desc = "";
                     string genre = "";
                     string extraInfo = "";
+                    string toolTipText = "";
 
                     try
                     {
@@ -528,17 +548,15 @@ namespace EDCBMonitor
                             if (pgInfo.ShortInfo != null) desc = pgInfo.ShortInfo.text_char;
                             if (pgInfo.ContentInfo != null) genre = GetGenreText(pgInfo.ContentInfo);
                             
-                            // 付属情報 (ConvertAttribText相当)
+                            // 付属情報
                             var extList = new List<string>();
                             if (pgInfo.EventRelayInfo != null && pgInfo.EventRelayInfo.eventDataList.Count > 0) extList.Add("[イベントリレー]");
-                            
                             if (pgInfo.ContentInfo != null && pgInfo.ContentInfo.nibbleList != null)
                             {
                                 var attrs = pgInfo.ContentInfo.nibbleList
                                     .Where(x => x.content_nibble_level_1 == 0x0E && x.content_nibble_level_2 == 0x00)
                                     .Select(x => x.user_nibble_1)
                                     .Distinct();
-
                                 foreach (var u1 in attrs)
                                 {
                                     switch (u1)
@@ -552,11 +570,42 @@ namespace EDCBMonitor
                                 }
                             }
                             extraInfo = string.Join(",", extList);
+
+                            // --- ツールチップ詳細テキストの作成 ---
+                            var sb = new StringBuilder();
+                            sb.AppendLine($"【番組名】 {r.Title}");
+                            sb.AppendLine($"【日時】 {r.StartTime:MM/dd(ddd) HH:mm}～{endTime:HH:mm} ({FormatDuration((int)r.DurationSecond)})");
+                            sb.AppendLine($"【放送局】 {r.StationName}");
+                            sb.AppendLine();
+                            
+                            if (!string.IsNullOrEmpty(desc))
+                            {
+                                sb.AppendLine(desc);
+                                sb.AppendLine();
+                            }
+
+                            // 詳細情報 (ExtInfo) の取得と追加
+                            if (pgInfo.ExtInfo != null && !string.IsNullOrEmpty(pgInfo.ExtInfo.text_char))
+                            {
+                                sb.AppendLine("--------------------------------------------------");
+                                sb.AppendLine(pgInfo.ExtInfo.text_char.Trim());
+                                sb.AppendLine();
+                            }
+
+                            if (!string.IsNullOrEmpty(genre)) sb.AppendLine($"【ジャンル】 {genre}");
+                            if (!string.IsNullOrEmpty(extraInfo)) sb.AppendLine($"【映像・音声】 {extraInfo}");
+
+                            toolTipText = sb.ToString().TrimEnd();
                         }
                     }
                     catch { }
 
-                    // 1. 予約種類の判定
+                    // EPG情報が取れなかった場合の最低限の表示
+                    if (string.IsNullOrEmpty(toolTipText))
+                    {
+                        toolTipText = $"{r.Title}\n{r.StartTime:MM/dd(ddd) HH:mm}～{endTime:HH:mm}\n{r.StationName}";
+                    }
+
                     bool isEpgReserve = (r.EventID != 0xFFFF);
                     bool isAutoAdded = (!string.IsNullOrEmpty(r.Comment) && !r.Comment.EndsWith("$"));
 
@@ -564,7 +613,6 @@ namespace EDCBMonitor
                     if (isAutoAdded) { if (isEpgReserve) typeStr = "KW"; else typeStr = "自動(PG)"; }
                     else { if (isEpgReserve) typeStr = "個別(EPG)"; else typeStr = "個別(PG)"; }
 
-                    // 2. 表示用文字列の生成
                     string rawComment = SanitizeText(r.Comment);
                     string bodyComment = rawComment
                         .Replace("EPG自動予約", "")
@@ -577,10 +625,22 @@ namespace EDCBMonitor
                     string comment;
                     if (!isAutoAdded) comment = typeStr;
                     else comment = string.IsNullOrEmpty(bodyComment) ? typeStr : $"{typeStr}{bodyComment}";
+                    
+                    double progress = 0;
+                    if (isRecording && !Config.Data.OmitProgress && r.DurationSecond > 0)
+                    {
+                        double elapsed = (DateTime.Now - r.StartTime).TotalSeconds;
+                        progress = (elapsed / r.DurationSecond) * 100.0;
+                        
+                        if (progress < 0) progress = 0;
+                        if (progress > 100) progress = 100;
+                    }
 
                     list.Add(new ReserveItem {
                         ID = r.ReserveID,
                         Status = status,
+                        ToolTipText = toolTipText,
+                        ProgressValue = progress,
                         DateTimeInfo = dateTimeInfo,
                         Duration = FormatDuration((int)r.DurationSecond),
                         NetworkName = GetNetworkName(r.OriginalNetworkID),
@@ -593,7 +653,7 @@ namespace EDCBMonitor
                         IsEnabledBool = !isDisabled,
                         ProgramType = programType,
                         Comment = comment,
-                        ErrorInfo = errorInfo, // エラー情報
+                        ErrorInfo = errorInfo,
                         RecFileName = SanitizeText(recFileName),
                         RecFileNameList = SanitizeText(recFileNameList),
                         Tuner = tunerAppointed,
@@ -614,11 +674,10 @@ namespace EDCBMonitor
                         StartTimeRaw = r.StartTime,
                         IsRecording = isRecording,
                         IsDisabled = isDisabled,
-                        EventID = r.EventID // 重複チェック用
+                        EventID = r.EventID
                     });
                 }
 
-                // 重複予約のチェックと追記
                 var duplicates = list
                     .Where(x => x.EventID != 0xFFFF)
                     .GroupBy(x => x.EventID)
