@@ -20,11 +20,16 @@ namespace EDCBMonitor
         private string _scrollBarColor = "#393939";
         private string _foregroundColor = "#EEEEEE";
         private string _recColor = "#FF5555";
-        public string ReserveErrorColor { get; set; } = "#C85D5A";
+        
+        private string _reserveErrorColor = "#C85D5A";
+        public string ReserveErrorColor { get => _reserveErrorColor; set => SetProperty(ref _reserveErrorColor, value); }
+        
         private string _disabledColor = "#777777";
         private string _progressBarColor = "#0064C8";
+        private string _progressBarBackColor = "#A9A9A9";
         private string _columnBorderColor = "#808080";
         private string _footerColor = "#888888";
+        private string _mainBorderColor = "#555555";
         private bool _recBold = true;
 
         private string _fontFamily = "Yu Gothic UI";
@@ -46,6 +51,12 @@ namespace EDCBMonitor
 
         private bool _enableTitleRemove = true;
         private string _titleRemovePattern = @"[\[\(【](SS|無料|[字デ解二無多映])[\]\)】]";
+        
+        private string _tvTestPath = "";
+        public string TvTestPath { get => _tvTestPath; set => SetProperty(ref _tvTestPath, value); }
+
+        private string _tvTestCmd = ""; 
+        public string TvTestCmd { get => _tvTestCmd; set => SetProperty(ref _tvTestCmd, value); }
 
         private bool _showHeader = true;
         private bool _showListHeader = true;
@@ -55,6 +66,9 @@ namespace EDCBMonitor
         public double Left { get; set; } = -10000;
         public double Width { get; set; } = 730;
         public double Height { get; set; } = 500;
+        public bool IsVerticalMaximized { get; set; } = false;
+        public double RestoreTop { get; set; } = -10000;
+        public double RestoreHeight { get; set; } = 500;
         
         public List<string> ColumnHeaderOrder { get; set; } = new List<string>();
 
@@ -62,6 +76,8 @@ namespace EDCBMonitor
         public bool ShowColStatus { get; set; } = false;
         public bool ShowColDateTime { get; set; } = true;
         public bool OmitProgress { get; set; } = false;
+        public bool ShowRemainingTime { get; set; } = false;
+        public string FooterBtnColor { get; set; } = "#555555";
         public bool ShowColDuration { get; set; } = true;
         public bool ShowColNetwork { get; set; } = false;
         public bool ShowColServiceName { get; set; } = true;
@@ -101,7 +117,7 @@ namespace EDCBMonitor
         public double WidthColDateTime { get; set; } = 132;
         public double WidthColDuration { get; set; } = 31;
         public double WidthColNetwork { get; set; } = 70;
-        public double WidthColServiceName { get; set; } = 70;
+        public double WidthColServiceName { get; set; } = 58;
         public double WidthColTitle { get; set; } = 460;
         public double WidthColDesc { get; set; } = 150;
         public double WidthColGenre { get; set; } = 80;
@@ -138,6 +154,7 @@ namespace EDCBMonitor
         public string RecColor { get => _recColor; set => SetProperty(ref _recColor, value); }
         public string DisabledColor { get => _disabledColor; set => SetProperty(ref _disabledColor, value); }
         public string ProgressBarColor { get => _progressBarColor; set => SetProperty(ref _progressBarColor, value); }
+        public string ProgressBarBackColor { get => _progressBarBackColor; set => SetProperty(ref _progressBarBackColor, value); }
         public bool RecBold { get => _recBold; set => SetProperty(ref _recBold, value); }
         public string FontFamily { get => _fontFamily; set => SetProperty(ref _fontFamily, value); }
         public double FontSize { get => _fontSize; set => SetProperty(ref _fontSize, value); }
@@ -159,6 +176,9 @@ namespace EDCBMonitor
         public bool ShowToolTip { get => _showToolTip; set => SetProperty(ref _showToolTip, value); }
         public double ToolTipWidth { get => _toolTipWidth; set => SetProperty(ref _toolTipWidth, value); }
 
+        public int ScrollAmountVertical { get; set; } = 3;
+        public int ScrollAmountHorizontal { get; set; } = 3;
+
         public bool EnableTitleRemove { get => _enableTitleRemove; set => SetProperty(ref _enableTitleRemove, value); }
         public string TitleRemovePattern { get => _titleRemovePattern; set => SetProperty(ref _titleRemovePattern, value); }
         public bool ShowHeader { get => _showHeader; set => SetProperty(ref _showHeader, value); }
@@ -166,6 +186,7 @@ namespace EDCBMonitor
         public bool ShowFooter { get => _showFooter; set => SetProperty(ref _showFooter, value); }
         public string ColumnBorderColor { get => _columnBorderColor; set => SetProperty(ref _columnBorderColor, value); }
         public string FooterColor { get => _footerColor; set => SetProperty(ref _footerColor, value); }
+        public string MainBorderColor { get => _mainBorderColor; set => SetProperty(ref _mainBorderColor, value); }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -188,27 +209,81 @@ namespace EDCBMonitor
 
         public static void Load()
         {
-            try { if (File.Exists(ConfigPath)) { var serializer = new XmlSerializer(typeof(ConfigData)); using var sr = new StreamReader(ConfigPath, new UTF8Encoding(false)); if (serializer.Deserialize(sr) is ConfigData loaded) Data = loaded; } } catch { }
+            string path = ConfigPath;
+            string tempPath = path + ".tmp"; // EM_Config.xml.tmp
+
+            // 1. 復旧処理 (try-catchの外で行い、成否に関わらずログを出さない)
+            if (!File.Exists(path) && File.Exists(tempPath))
+            {
+                try
+                {
+                    File.Move(tempPath, path);
+                }
+                catch
+                {
+                    // 移動失敗（ファイルロック中など）時は何もしない
+                    // ここでログを出さないことで、ユーザーに不安を与えません
+                }
+            }
+
+            // 2. 読み込み処理
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var serializer = new XmlSerializer(typeof(ConfigData));
+                    using (var sr = new StreamReader(path, new UTF8Encoding(false)))
+                    {
+                        if (serializer.Deserialize(sr) is ConfigData loaded)
+                        {
+                            Data = loaded;
+                        }
+                    }
+                }
+        
+                if (File.Exists(tempPath))
+                {
+                    try { File.Delete(tempPath); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { Logger.Write("設定読み込みエラー: " + ex.Message); } catch { }
+            }
         }
 
         public static void Save()
         {
+            string path = ConfigPath;
+            string tempPath = path + ".tmp";
+
             try
             {
-                string path = ConfigPath;
-                string tempPath = path + ".tmp";
                 var serializer = new XmlSerializer(typeof(ConfigData));
+        
+                // 1. 一時ファイルへ確実に書き出す
                 using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
                 {
                     serializer.Serialize(sw, Data);
                     sw.Flush();
-                    fs.Flush(true);
+                    fs.Flush(true); 
                 }
-                if (File.Exists(path)) File.Delete(path);
+
+                // 2. 古いファイルを消して、新しいファイルに名前を変える
+                // Replaceメソッドが使える場合はそれが最適だが
+                // 互換性と確実性のために以下の手順で行う
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
                 File.Move(tempPath, path);
             }
-            catch (Exception ex) { try { Logger.Write("設定保存エラー: " + ex.Message); } catch { } }
+            catch (Exception ex)
+            {
+                try { Logger.Write("設定保存エラー: " + ex.Message); } catch { }
+            }
         }
+        
     }
 }

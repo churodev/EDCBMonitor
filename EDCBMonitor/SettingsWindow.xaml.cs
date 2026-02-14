@@ -32,7 +32,7 @@ namespace EDCBMonitor
                 using var ms = new MemoryStream();
                 serializer.Serialize(ms, Config.Data);
                 _backupConfigXml = Encoding.UTF8.GetString(ms.ToArray());
-            } catch { }
+            } catch (Exception ex) { Logger.Write("BackupConfig Error: " + ex.Message); }
         }
 
         private void RestoreConfig()
@@ -45,12 +45,11 @@ namespace EDCBMonitor
                     using var ms = new MemoryStream(Encoding.UTF8.GetBytes(_backupConfigXml));
                     if (serializer.Deserialize(ms) is ConfigData restored) Config.Data = restored;
                 }
-            } catch { }
+            } catch (Exception ex) { Logger.Write("RestoreConfig Error: " + ex.Message); }
         }
 
         private void LoadValues()
         {
-            // 既存設定のロード
             TxtPath.Text = Config.Data.EdcbInstallPath;
             ChkTopmost.IsChecked = Config.Data.Topmost;
             ChkHideDisabled.IsChecked = Config.Data.HideDisabled;
@@ -64,8 +63,10 @@ namespace EDCBMonitor
             ChkRecBold.IsChecked = Config.Data.RecBold;
             TxtColumnBorderColor.Text = Config.Data.ColumnBorderColor;
             TxtFooterColor.Text = Config.Data.FooterColor;
+            TxtMainBorderColor.Text = Config.Data.MainBorderColor;
             TxtErrorColor.Text = Config.Data.ReserveErrorColor;
             TxtProgressBarColor.Text = Config.Data.ProgressBarColor;
+            TxtProgressBarBackColor.Text = Config.Data.ProgressBarBackColor;
             TxtFontSize.Text = Config.Data.FontSize.ToString();
             TxtHeaderFontSize.Text = Config.Data.HeaderFontSize.ToString();
             TxtFooterFontSize.Text = Config.Data.FooterFontSize.ToString();
@@ -83,16 +84,24 @@ namespace EDCBMonitor
             ChkShowToolTip.IsChecked = Config.Data.ShowToolTip;
             TxtToolTipWidth.Text = Config.Data.ToolTipWidth.ToString();
 
+            TxtScrollV.Text = Config.Data.ScrollAmountVertical.ToString();
+            TxtScrollH.Text = Config.Data.ScrollAmountHorizontal.ToString();
+
             ChkEnableTitleRemove.IsChecked = Config.Data.EnableTitleRemove;
             TxtTitleRemovePattern.Text = Config.Data.TitleRemovePattern;
 
             CmbFont.Items.Clear();
-            var langJa = XmlLanguage.GetLanguage("ja-jp");
-            foreach (var font in Fonts.SystemFontFamilies)
+            try
             {
-                if (font.FamilyNames.ContainsKey(langJa)) CmbFont.Items.Add(font.FamilyNames[langJa]);
-                else CmbFont.Items.Add(font.Source);
+                var langJa = XmlLanguage.GetLanguage("ja-jp");
+                foreach (var font in Fonts.SystemFontFamilies)
+                {
+                    if (font.FamilyNames.ContainsKey(langJa)) CmbFont.Items.Add(font.FamilyNames[langJa]);
+                    else CmbFont.Items.Add(font.Source);
+                }
             }
+            catch (Exception ex) { Logger.Write("Font Load Error: " + ex.Message); }
+            
             CmbFont.Text = Config.Data.FontFamily;
 
             ChkShowHeader.IsChecked = Config.Data.ShowHeader;
@@ -103,8 +112,8 @@ namespace EDCBMonitor
             ChkOmitMonth.IsChecked = Config.Data.OmitMonth;
             ChkOmitEndTime.IsChecked = Config.Data.OmitEndTime;
             ChkOmitProgress.IsChecked = Config.Data.OmitProgress;
+            ChkShowRemainingTime.IsChecked = Config.Data.ShowRemainingTime;
 
-            // 31項目のカラム設定ロード
             ChkColStatus.IsChecked = Config.Data.ShowColStatus;
             ChkColDateTime.IsChecked = Config.Data.ShowColDateTime;
             ChkColDuration.IsChecked = Config.Data.ShowColDuration;
@@ -136,6 +145,9 @@ namespace EDCBMonitor
             ChkColStartMargin.IsChecked = Config.Data.ShowColStartMargin;
             ChkColEndMargin.IsChecked = Config.Data.ShowColEndMargin;
             ChkColID.IsChecked = Config.Data.ShowColID;
+            TxtBtnColor.Text = Config.Data.FooterBtnColor;
+            TxtTvTestPath.Text = Config.Data.TvTestPath;
+            TxtTvTestCmd.Text = Config.Data.TvTestCmd;
         }
 
         private void ApplyUiToConfig()
@@ -153,13 +165,15 @@ namespace EDCBMonitor
             Config.Data.RecBold = ChkRecBold.IsChecked == true;
             Config.Data.ColumnBorderColor = TxtColumnBorderColor.Text;
             Config.Data.FooterColor = TxtFooterColor.Text;
+            Config.Data.MainBorderColor = TxtMainBorderColor.Text;
             Config.Data.ReserveErrorColor = TxtErrorColor.Text;
             Config.Data.ProgressBarColor = TxtProgressBarColor.Text;
+            Config.Data.ProgressBarBackColor = TxtProgressBarBackColor.Text;
             Config.Data.EnableTitleRemove = ChkEnableTitleRemove.IsChecked == true;
             Config.Data.TitleRemovePattern = TxtTitleRemovePattern.Text;
             
-            if (CmbFont.SelectedItem != null) Config.Data.FontFamily = CmbFont.SelectedItem.ToString();
-            else Config.Data.FontFamily = CmbFont.Text;
+            if (CmbFont.SelectedItem != null) Config.Data.FontFamily = CmbFont.SelectedItem.ToString() ?? "";
+            else Config.Data.FontFamily = CmbFont.Text ?? "";
 
             if (double.TryParse(TxtFontSize.Text, out double fs)) Config.Data.FontSize = fs;
             if (double.TryParse(TxtHeaderFontSize.Text, out double hfs)) Config.Data.HeaderFontSize = hfs;
@@ -178,6 +192,9 @@ namespace EDCBMonitor
             Config.Data.ShowToolTip = ChkShowToolTip.IsChecked == true;
             if (double.TryParse(TxtToolTipWidth.Text, out double ttw)) Config.Data.ToolTipWidth = ttw;
 
+            if (int.TryParse(TxtScrollV.Text, out int sv)) Config.Data.ScrollAmountVertical = sv;
+            if (int.TryParse(TxtScrollH.Text, out int sh)) Config.Data.ScrollAmountHorizontal = sh;
+
             Config.Data.ShowHeader = ChkShowHeader.IsChecked == true;
             Config.Data.ShowListHeader = ChkShowListHeader.IsChecked == true;
             Config.Data.ShowFooter = ChkShowFooter.IsChecked == true;
@@ -186,8 +203,8 @@ namespace EDCBMonitor
             Config.Data.OmitMonth = ChkOmitMonth.IsChecked == true;
             Config.Data.OmitEndTime = ChkOmitEndTime.IsChecked == true;
             Config.Data.OmitProgress = ChkOmitProgress.IsChecked == true;
+            Config.Data.ShowRemainingTime = ChkShowRemainingTime.IsChecked == true;
 
-            // 31項目のカラム設定適用
             Config.Data.ShowColStatus = ChkColStatus.IsChecked == true;
             Config.Data.ShowColDateTime = ChkColDateTime.IsChecked == true;
             Config.Data.ShowColDuration = ChkColDuration.IsChecked == true;
@@ -219,6 +236,9 @@ namespace EDCBMonitor
             Config.Data.ShowColStartMargin = ChkColStartMargin.IsChecked == true;
             Config.Data.ShowColEndMargin = ChkColEndMargin.IsChecked == true;
             Config.Data.ShowColID = ChkColID.IsChecked == true;
+            Config.Data.FooterBtnColor = TxtBtnColor.Text;
+            Config.Data.TvTestPath = TxtTvTestPath.Text;
+            Config.Data.TvTestCmd = TxtTvTestCmd.Text;
         }
 
         private void UpdatePreview(bool needReload)
@@ -258,7 +278,11 @@ namespace EDCBMonitor
             if (this.DialogResult != true)
             {
                 RestoreConfig();
-                if (this.Owner is MainWindow mw) mw.ApplySettings();
+                if (this.Owner is MainWindow mw)
+                {
+                    mw.ApplySettings();
+                    _ = mw.RefreshDataAsync();
+                }
             }
         }
 
@@ -283,12 +307,16 @@ namespace EDCBMonitor
             TxtScrollBarColor.Text = "#393939";
             TxtFgColor.Text = "#EEEEEE";
             TxtDisabledColor.Text = "#777777";
-            TxtColumnBorderColor.Text = "#808080"; 
-            
+            TxtColumnBorderColor.Text = "#808080";
+            TxtBtnColor.Text = "#555555"; 
+            TxtMainBorderColor.Text = "#555555";
+
             TxtFooterColor.Text = "#888888";
             TxtToolTipBgColor.Text = "#F2F2F2";
             TxtToolTipFgColor.Text = "#000000";
             TxtToolTipBorderColor.Text = "#767676";
+            TxtProgressBarBackColor.Text = "#A9A9A9";
+            TxtRecColor.Text = "#FF5555";
             UpdatePreview(false);
         }
 
@@ -299,11 +327,15 @@ namespace EDCBMonitor
             TxtFgColor.Text = "#2D2D2D";
             TxtDisabledColor.Text = "#C0C0C0";
             TxtColumnBorderColor.Text = "#8C8C8C"; 
+            TxtBtnColor.Text = "#ABABAB";
+            TxtMainBorderColor.Text = "#ABABAB";
             
             TxtFooterColor.Text = "#ACACAC";
             TxtToolTipBgColor.Text = "#FFFFE1"; 
             TxtToolTipFgColor.Text = "#000000";
             TxtToolTipBorderColor.Text = "#7A7A7A";
+            TxtProgressBarBackColor.Text = "#E6E6E6";
+            TxtRecColor.Text = "#FF0000";
             UpdatePreview(false);
         }
 
@@ -317,6 +349,20 @@ namespace EDCBMonitor
                 UpdatePreview(false);
             }
         }
+        
+        private void BtnBrowseTvTest_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*",
+                Title = "TVTest.exe の選択"
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                TxtTvTestPath.Text = dlg.FileName;
+                UpdatePreview(false);
+            }
+        }
 
         private void BtnPickBg_Click(object sender, RoutedEventArgs e) => PickColor(TxtBgColor);
         private void BtnPickScrollBar_Click(object sender, RoutedEventArgs e) => PickColor(TxtScrollBarColor);
@@ -325,11 +371,14 @@ namespace EDCBMonitor
         private void BtnPickDisabled_Click(object sender, RoutedEventArgs e) => PickColor(TxtDisabledColor);
         private void BtnPickColumnBorder_Click(object sender, RoutedEventArgs e) => PickColor(TxtColumnBorderColor);
         private void BtnPickFooter_Click(object sender, RoutedEventArgs e) => PickColor(TxtFooterColor);
+        private void BtnPickMainBorder_Click(object sender, RoutedEventArgs e) => PickColor(TxtMainBorderColor);
         private void BtnPickError_Click(object sender, RoutedEventArgs e) => PickColor(TxtErrorColor);
         private void BtnPickProgressBar_Click(object sender, RoutedEventArgs e) => PickColor(TxtProgressBarColor);
+        private void BtnPickProgressBarBack_Click(object sender, RoutedEventArgs e) => PickColor(TxtProgressBarBackColor);
 
         private void BtnPickToolTipBg_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipBgColor);
         private void BtnPickToolTipFg_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipFgColor);
         private void BtnPickToolTipBorder_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipBorderColor);
+        private void BtnPickBtnColor_Click(object sender, RoutedEventArgs e) => PickColor(TxtBtnColor);
     }
 }

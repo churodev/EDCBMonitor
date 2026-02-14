@@ -8,189 +8,189 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
-using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Interop;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using WinForms = System.Windows.Forms;
-using EpgTimer;
 
-// Windows Formsとの名前衝突を避けるためのエイリアス定義
-using Application = System.Windows.Application;
-using Binding = System.Windows.Data.Binding;
-using ButtonBase = System.Windows.Controls.Primitives.ButtonBase;
-using Control = System.Windows.Controls.Control;
-using ListViewItem = System.Windows.Controls.ListViewItem;
-using TextBox = System.Windows.Controls.TextBox;
-using FontFamily = System.Windows.Media.FontFamily;
-using Brushes = System.Windows.Media.Brushes;
+// 衝突回避の別名
+using WinForms = System.Windows.Forms;
+using Drawing = System.Drawing;
 using Point = System.Windows.Point;
-using Brush = System.Windows.Media.Brush;
-using Color = System.Windows.Media.Color;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
+using FontFamily = System.Windows.Media.FontFamily;
 
 namespace EDCBMonitor
 {
     public partial class MainWindow : Window
     {
-        private class ColumnDef
-        {
-            public string Header { get; set; } = "";
-            public string BindingPath { get; set; } = "";
-            public Func<bool> GetShow { get; set; } = () => true;
-            public Func<double> GetWidth { get; set; } = () => 100;
-        }
+        #region Constants & Win32 API
+        private const int MAX_RETRY_COUNT = 3;
+        private const int MOUSE_SNAP_DIST = 20;
+        private const int WM_MOUSEHWHEEL = 0x020E;
+        #endregion
 
-        [DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
-
-        private const int SW_RESTORE = 9;
-
-        private DispatcherTimer _updateTimer;
-        private FileSystemWatcher _fileWatcher;
-        private WinForms.NotifyIcon _notifyIcon;
-        private DateTime _lastReloadTime = DateTime.MinValue;
-
-        // スナップ機能用の変数
+        #region Fields
+        private readonly DispatcherTimer _updateTimer;
+        private FileSystemWatcher? _fileWatcher;
+        private WinForms.NotifyIcon? _notifyIcon;
+        private DispatcherTimer? _reloadDebounceTimer;
+        
+        private int _retryCount = 0;
+        private bool _isShowingTempMessage = false;
         private bool _isDragging = false;
-        private Point _startMousePoint; 
+        private Point _startMousePoint;
+        private Rect? _restoreBounds = null;
+
+        private readonly ReservationService _reservationService;
+        private readonly GridColumnManager _columnManager;
+        
+        // 監視状態を表示するためのフィールド
+        private string _watcherStatusMessage = "";
+        #endregion
 
         public MainWindow()
         {
             InitializeComponent();
             InitializeNotifyIcon();
+            LoadAppIcon();
+            
+            _reservationService = new ReservationService();
+            // ここでエラーになっていたメソッドを渡せるようにクラス内にメソッド定義が必要
+            _columnManager = new GridColumnManager(LstReservations, ReservationCheckBox_Click);
 
-            try
-            {
-                string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
-                if (!string.IsNullOrEmpty(exePath) && _notifyIcon != null)
-                {
-                    _notifyIcon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
-                }
-            }
-            catch 
-            {
-                if (_notifyIcon != null) _notifyIcon.Icon = System.Drawing.SystemIcons.Application;
-            }
-
-            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            _updateTimer.Tick += async (s, e) => 
-            {
-                bool success = await UpdateReservations();
-                _updateTimer.Interval = TimeSpan.FromSeconds(success ? 60 : 5);
-            };
+            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _updateTimer.Tick += UpdateTimer_Tick;
             _updateTimer.Start();
 
-            ApplySettings();
+            ApplySettings(true);
 
-            this.Loaded += async (s, e) => 
+            Loaded += async (s, e) => 
             {
                 EnsureWindowIsVisible();
+                SetupFileWatcher();
                 await UpdateReservations();
             };
 
-            this.Closing += Window_Closing;
+            Closing += Window_Closing;
+        }
 
-            SetupFileWatcher();
+        private void LoadAppIcon()
+        {
+            try
+            {
+                string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                if (!string.IsNullOrEmpty(exePath) && _notifyIcon != null && File.Exists(exePath))
+                {
+                    _notifyIcon.Icon = Drawing.Icon.ExtractAssociatedIcon(exePath);
+                }
+            }
+            catch
+            {
+                if (_notifyIcon != null) _notifyIcon.Icon = Drawing.SystemIcons.Application;
+            }
         }
 
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
-            var source = PresentationSource.FromVisual(this) as HwndSource;
-            source?.AddHook(WndProc);
+            if (PresentationSource.FromVisual(this) is HwndSource source)
+            {
+                source.AddHook(WndProc);
+            }
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            const int WM_MOUSEHWHEEL = 0x020E;
-
             if (msg == WM_MOUSEHWHEEL)
             {
                 int tilt = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
-                
                 var sv = GetScrollViewer(LstReservations);
+                
                 if (sv != null)
                 {
-                    if (tilt > 0)
-                    {
-                        for(int i=0; i<15; i++) sv.LineRight();
-                    }
-                    else if (tilt < 0)
-                    {
-                        for(int i=0; i<15; i++) sv.LineLeft();
-                    }
+                    // 設定された行数分スクロール
+                    int lines = Config.Data.ScrollAmountHorizontal;
+                    if (tilt > 0) for (int i = 0; i < lines; i++) sv.LineRight();
+                    else if (tilt < 0) for (int i = 0; i < lines; i++) sv.LineLeft();
                     handled = true;
                 }
             }
-
             return IntPtr.Zero;
         }
-
-        private ScrollViewer GetScrollViewer(DependencyObject o)
+        
+        private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if (o is ScrollViewer sv) return sv;
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(o); i++)
+            var sv = GetScrollViewer(LstReservations);
+            if (sv != null)
             {
-                var child = VisualTreeHelper.GetChild(o, i);
-                var result = GetScrollViewer(child);
-                if (result != null) return result;
+                int lines = Config.Data.ScrollAmountVertical;
+                if (e.Delta > 0)
+                {
+                    for (int i = 0; i < lines; i++) sv.LineUp();
+                }
+                else
+                {
+                    for (int i = 0; i < lines; i++) sv.LineDown();
+                }
+                e.Handled = true;
             }
-            return null;
+        }
+
+        private async void UpdateTimer_Tick(object? sender, EventArgs e)
+        {
+            if (LstReservations.ItemsSource is not List<ReserveItem> list)
+            {
+                _retryCount++;
+                if (_retryCount >= MAX_RETRY_COUNT)
+                {
+                    _retryCount = 0;
+                    await UpdateReservations();
+                }
+                return;
+            }
+            foreach (var item in list) item.UpdateProgress(); 
         }
 
         private void InitializeNotifyIcon()
         {
-            _notifyIcon = new WinForms.NotifyIcon();
-            _notifyIcon.Text = "EDCB Monitor";
-            _notifyIcon.Visible = true;
+            _notifyIcon = new WinForms.NotifyIcon
+            {
+                Text = "EDCB Monitor",
+                Visible = true
+            };
 
             var menu = new WinForms.ContextMenuStrip();
             menu.Items.Add("設定...", null, (s, e) => MenuSettings_Click(null, null));
-            menu.Items.Add("再読み込み", null, (s, e) => { var t = UpdateReservations(); });
+            menu.Items.Add("再読み込み", null, (s, e) => { _ = UpdateReservations(); });
             menu.Items.Add("終了", null, (s, e) => {
                 if (_notifyIcon != null) _notifyIcon.Visible = false;
-                Application.Current.Shutdown(); 
+                System.Windows.Application.Current.Shutdown(); 
             });
             _notifyIcon.ContextMenuStrip = menu;
 
             _notifyIcon.DoubleClick += (s, e) => 
             {
-                if (this.WindowState == WindowState.Minimized)
-                    this.WindowState = WindowState.Normal;
-                this.Activate();
-                this.Topmost = true;
-                this.Topmost = Config.Data.Topmost;
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Activate();
+                Topmost = true;
+                Topmost = Config.Data.Topmost;
             };
         }
 
-        // --- スナップ機能 ---
+        #region Window Interaction
         private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!IsInteractiveControl(e.OriginalSource as DependencyObject))
+            if (e.OriginalSource is DependencyObject obj && !IsInteractiveControl(obj))
             {
                 LstReservations.UnselectAll();
-            }
-            if (IsInteractiveControl(e.OriginalSource as DependencyObject)) return;
-            
-            try
-            {
                 if (e.ButtonState == MouseButtonState.Pressed)
                 {
                     _isDragging = true;
                     _startMousePoint = e.GetPosition(this);
-                    this.CaptureMouse();
+                    CaptureMouse();
                 }
             }
-            catch { }
         }
 
         private void Window_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -199,43 +199,33 @@ namespace EDCBMonitor
 
             try
             {
-                System.Drawing.Point cursorScreenPos = WinForms.Cursor.Position;
-
+                var cursorScreenPos = WinForms.Cursor.Position;
                 var source = PresentationSource.FromVisual(this);
-                double dpiX = 1.0, dpiY = 1.0;
-                if (source != null && source.CompositionTarget != null)
-                {
-                    dpiX = source.CompositionTarget.TransformToDevice.M11;
-                    dpiY = source.CompositionTarget.TransformToDevice.M22;
-                }
+                
+                double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
 
-                WinForms.Screen currentScreen = WinForms.Screen.FromPoint(cursorScreenPos);
-                System.Drawing.Rectangle workArea = currentScreen.WorkingArea;
+                var currentScreen = WinForms.Screen.FromPoint(cursorScreenPos);
+                var workArea = currentScreen.WorkingArea;
 
                 double newLeft = (cursorScreenPos.X / dpiX) - _startMousePoint.X;
                 double newTop = (cursorScreenPos.Y / dpiY) - _startMousePoint.Y;
-
-                double snapDist = 20.0;
 
                 double screenLeft = workArea.Left / dpiX;
                 double screenTop = workArea.Top / dpiY;
                 double screenRight = workArea.Right / dpiX;
                 double screenBottom = workArea.Bottom / dpiY;
 
-                if (Math.Abs(newLeft - screenLeft) < snapDist)
-                    newLeft = screenLeft;
-                else if (Math.Abs(newLeft + this.ActualWidth - screenRight) < snapDist)
-                    newLeft = screenRight - this.ActualWidth;
+                if (Math.Abs(newLeft - screenLeft) < MOUSE_SNAP_DIST) newLeft = screenLeft;
+                else if (Math.Abs(newLeft + ActualWidth - screenRight) < MOUSE_SNAP_DIST) newLeft = screenRight - ActualWidth;
 
-                if (Math.Abs(newTop - screenTop) < snapDist)
-                    newTop = screenTop;
-                else if (Math.Abs(newTop + this.ActualHeight - screenBottom) < snapDist)
-                    newTop = screenBottom - this.ActualHeight;
+                if (Math.Abs(newTop - screenTop) < MOUSE_SNAP_DIST) newTop = screenTop;
+                else if (Math.Abs(newTop + ActualHeight - screenBottom) < MOUSE_SNAP_DIST) newTop = screenBottom - ActualHeight;
 
-                this.Left = newLeft;
-                this.Top = newTop;
+                Left = newLeft;
+                Top = newTop;
             }
-            catch { }
+            catch (Exception ex) { Logger.Write($"Mouse Move Error: {ex.Message}"); }
         }
 
         private void Window_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -243,125 +233,57 @@ namespace EDCBMonitor
             if (_isDragging)
             {
                 _isDragging = false;
-                this.ReleaseMouseCapture();
+                ReleaseMouseCapture();
                 SaveCurrentState();
             }
         }
 
         private void Window_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            DependencyObject obj = e.OriginalSource as DependencyObject;
+            DependencyObject? obj = e.OriginalSource as DependencyObject;
             while (obj != null)
             {
-                if (obj is ButtonBase || obj is Thumb || obj is TextBox) return;
-                if (obj is ListViewItem)
+                if (obj is System.Windows.Controls.Primitives.ButtonBase || obj is System.Windows.Controls.Primitives.Thumb || obj is System.Windows.Controls.TextBox) return;
+                if (obj is System.Windows.Controls.ListViewItem)
                 {
-                    ActivateOrLaunchEpgTimer();
+                    ExternalAppHelper.ActivateOrLaunchEpgTimer();
                     e.Handled = true;
                     return;
                 }
                 obj = VisualTreeHelper.GetParent(obj);
             }
-            ActivateOrLaunchEpgTimer();
-        }
-        
-        private void listView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-        {
-            ActivateOrLaunchEpgTimer();
-        }
-        
-        private void ActivateOrLaunchEpgTimer()
-        {
-            try
-            {
-                var proc = Process.GetProcessesByName("EpgTimer").FirstOrDefault();
-                if (proc != null)
-                {
-                    IntPtr hwnd = proc.MainWindowHandle;
-                    if (hwnd == IntPtr.Zero)
-                    {
-                        hwnd = FindWindow(null, "EpgTimer");
-                    }
-
-                    if (hwnd != IntPtr.Zero)
-                    {
-                        ShowWindow(hwnd, SW_RESTORE);
-                        SetForegroundWindow(hwnd);
-                    }
-                    return;
-                }
-
-                string exePath = GetEpgTimerExePath();
-                if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
-                {
-                    Process.Start(new ProcessStartInfo(exePath)
-                    {
-                        UseShellExecute = true,
-                        WorkingDirectory = Path.GetDirectoryName(exePath)
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Write("EpgTimer Launch Error: " + ex.Message);
-            }
+            ExternalAppHelper.ActivateOrLaunchEpgTimer();
         }
 
-        private string GetEpgTimerExePath()
-        {
-            string txtPath = ReserveTextReader.GetReserveFilePath();
-            if (string.IsNullOrEmpty(txtPath)) return "";
+        private void listView_MouseDoubleClick(object sender, MouseButtonEventArgs e) => ExternalAppHelper.ActivateOrLaunchEpgTimer();
 
-            string dir = Path.GetDirectoryName(txtPath) ?? "";
-            
-            string parentDir = Path.GetDirectoryName(dir) ?? "";
-            string pathA = Path.Combine(parentDir, "EpgTimer.exe");
-            if (File.Exists(pathA)) return pathA;
-
-            string pathB = Path.Combine(dir, "EpgTimer.exe");
-            if (File.Exists(pathB)) return pathB;
-
-            return "";
-        }
-
-        private bool IsInteractiveControl(DependencyObject obj)
+        private bool IsInteractiveControl(DependencyObject? obj)
         {
             while (obj != null)
             {
-                if (obj is ButtonBase ||
-                    obj is Thumb ||
-                    obj is TextBox ||
-                    obj is ListViewItem) 
-                {
-                    return true;
-                }
+                if (obj is System.Windows.Controls.Primitives.ButtonBase || obj is System.Windows.Controls.Primitives.Thumb || obj is System.Windows.Controls.TextBox || obj is System.Windows.Controls.ListViewItem) return true;
                 obj = VisualTreeHelper.GetParent(obj);
             }
             return false;
         }
-        
+        #endregion
+
+        #region Window State Management
         private void EnsureWindowIsVisible()
         {
             try
             {
-                bool isVisible = false;
-                foreach (var screen in WinForms.Screen.AllScreens)
-                {
-                    if (this.Left > -10000 && this.Left < 30000 && 
-                        this.Top > -10000 && this.Top < 30000 && 
-                        this.Width > 10 && this.Height > 10)
-                    {
-                        isVisible = true;
-                        break;
-                    }
-                }
+                bool isVisible = WinForms.Screen.AllScreens.Any(screen =>
+                    Left > -10000 && Left < 30000 && 
+                    Top > -10000 && Top < 30000 && 
+                    Width > 10 && Height > 10);
 
                 if (!isVisible)
                 {
-                    this.Left = 100;
-                    this.Top = 100;
-                    this.Width = Config.Data.Width; 
-                    this.Height = Config.Data.Height;
+                    Left = 100;
+                    Top = 100;
+                    Width = Config.Data.Width; 
+                    Height = Config.Data.Height;
                 }
             }
             catch { }
@@ -369,76 +291,37 @@ namespace EDCBMonitor
 
         private void SaveCurrentState()
         {
-            if (this.WindowState == WindowState.Normal)
+            if (_restoreBounds.HasValue)
             {
-                Config.Data.Top = this.Top;
-                Config.Data.Left = this.Left;
-                Config.Data.Width = this.Width;
-                Config.Data.Height = this.Height;
+                Config.Data.IsVerticalMaximized = true;
+                Config.Data.Top = Top;
+                Config.Data.Height = Height;
+                Config.Data.Left = Left;
+                Config.Data.Width = Width;
+                Config.Data.RestoreTop = _restoreBounds.Value.Top;
+                Config.Data.RestoreHeight = _restoreBounds.Value.Height;
+            }
+            else if (WindowState == WindowState.Normal)
+            {
+                Config.Data.IsVerticalMaximized = false;
+                Config.Data.Top = Top;
+                Config.Data.Left = Left;
+                Config.Data.Width = Width;
+                Config.Data.Height = Height;
             }
             else
             {
-                Config.Data.Top = this.RestoreBounds.Top;
-                Config.Data.Left = this.RestoreBounds.Left;
-                Config.Data.Width = this.RestoreBounds.Width;
-                Config.Data.Height = this.RestoreBounds.Height;
+                Config.Data.IsVerticalMaximized = false;
+                Config.Data.Top = RestoreBounds.Top;
+                Config.Data.Left = RestoreBounds.Left;
+                Config.Data.Width = RestoreBounds.Width;
+                Config.Data.Height = RestoreBounds.Height;
             }
 
-            var gv = (GridView)LstReservations.View;
-            if (gv != null)
-            {
-                Config.Data.ColumnHeaderOrder.Clear();
-                foreach (var col in gv.Columns)
-                {
-                    if (col.Header is string headerText)
-                    {
-                        Config.Data.ColumnHeaderOrder.Add(headerText);
-                    }
-                }
-
-                foreach (var col in gv.Columns)
-                {
-                    string header = col.Header as string;
-                    if (header == null) continue;
-
-                    double w = col.ActualWidth;
-
-                    if (header == "ID") Config.Data.WidthColID = w;
-                    else if (header == "状態") Config.Data.WidthColStatus = w;
-                    else if (header == "日時") Config.Data.WidthColDateTime = w;
-                    else if (header == "長さ") Config.Data.WidthColDuration = w;
-                    else if (header == "ネットワーク") Config.Data.WidthColNetwork = w;
-                    else if (header == "サービス名") Config.Data.WidthColServiceName = w;
-                    else if (header == "番組名") Config.Data.WidthColTitle = w;
-                    else if (header == "番組内容") Config.Data.WidthColDesc = w;
-                    else if (header == "ジャンル") Config.Data.WidthColGenre = w;
-                    else if (header == "付属情報") Config.Data.WidthColExtraInfo = w;
-                    else if (header == "有効") Config.Data.WidthColEnabled = w;
-                    else if (header == "プログラム予約") Config.Data.WidthColProgramType = w;
-                    else if (header == "予約状況") Config.Data.WidthColComment = w;
-                    else if (header == "エラー状況") Config.Data.WidthColError = w;
-                    else if (header == "予定ファイル名") Config.Data.WidthColRecFileName = w;
-                    else if (header == "予定ファイル名リスト") Config.Data.WidthColRecFileNameList = w;
-                    else if (header == "使用予定チューナー") Config.Data.WidthColTuner = w;
-                    else if (header == "予想サイズ") Config.Data.WidthColEstSize = w;
-                    else if (header == "プリセット") Config.Data.WidthColPreset = w;
-                    else if (header == "録画モード") Config.Data.WidthColRecMode = w;
-                    else if (header == "優先度") Config.Data.WidthColPriority = w;
-                    else if (header == "追従") Config.Data.WidthColTuijyuu = w;
-                    else if (header == "ぴったり") Config.Data.WidthColPittari = w;
-                    else if (header == "チューナー強制") Config.Data.WidthColTunerForce = w;
-                    else if (header == "録画後動作") Config.Data.WidthColRecEndMode = w;
-                    else if (header == "復帰後再起動") Config.Data.WidthColReboot = w;
-                    else if (header == "録画後実行bat") Config.Data.WidthColBat = w;
-                    else if (header == "録画タグ") Config.Data.WidthColRecTag = w;
-                    else if (header == "録画フォルダ") Config.Data.WidthColRecFolder = w;
-                    else if (header == "開始") Config.Data.WidthColStartMargin = w;
-                    else if (header == "終了") Config.Data.WidthColEndMargin = w;
-                }
-            }
+            _columnManager.SaveColumnState();
         }
 
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             if (_notifyIcon != null)
             {
@@ -446,194 +329,141 @@ namespace EDCBMonitor
                 _notifyIcon.Dispose();
                 _notifyIcon = null;
             }
-
-            if (_fileWatcher != null)
-            {
-                _fileWatcher.Dispose();
-                _fileWatcher = null;
-            }
-
+            _fileWatcher?.Dispose();
+            _fileWatcher = null;
             SaveCurrentState();
             Config.Save();
         }
+        #endregion
 
-        public void ApplySettings()
+        #region Apply Settings
+        public void ApplySettings(bool updateSize = false)
         {
             try
             {
-                if (Config.Data.Width > 0) this.Width = Config.Data.Width;
-                if (Config.Data.Height > 0) this.Height = Config.Data.Height;
-                
-                this.Top = Config.Data.Top;
-                this.Left = Config.Data.Left;
-                
-                this.Topmost = Config.Data.Topmost;
-
-                try { this.FontFamily = new FontFamily(Config.Data.FontFamily); } catch { }
-                this.FontSize = Config.Data.FontSize;
-                
-                if (LblStatus != null)
+                if (updateSize)
                 {
-                    LblStatus.FontSize = Config.Data.FooterFontSize;
+                    if (Config.Data.Width > 0) Width = Config.Data.Width;
+                    if (Config.Data.Height > 0) Height = Config.Data.Height;
+                    Top = Config.Data.Top;
+                    Left = Config.Data.Left;
+                }
+                
+                if (Config.Data.IsVerticalMaximized)
+                {
+                    _restoreBounds = new Rect(Left, Config.Data.RestoreTop, Width, Config.Data.RestoreHeight);
                 }
 
-                this.Resources["HeaderFontSize"] = Config.Data.HeaderFontSize;
+                Topmost = Config.Data.Topmost;
+
+                try { FontFamily = new FontFamily(Config.Data.FontFamily); } catch { }
+                FontSize = Config.Data.FontSize;
                 
-                var brushConverter = new BrushConverter();
-                var bgBrush = new SolidColorBrush(Colors.Black);
+                if (LblStatus != null) LblStatus.FontSize = Config.Data.FooterFontSize;
+
+                Resources["HeaderFontSize"] = Config.Data.HeaderFontSize;
+                
+                var brushConverter = new System.Windows.Media.BrushConverter();
+                var bgBrush = (SolidColorBrush?)brushConverter.ConvertFromString(Config.Data.BackgroundColor) ?? System.Windows.Media.Brushes.Black;
+                bgBrush.Opacity = Config.Data.Opacity;
+                MainBorder.Background = bgBrush;
+
+                var fgBrush = (SolidColorBrush?)brushConverter.ConvertFromString(Config.Data.ForegroundColor) ?? System.Windows.Media.Brushes.White;
+                LstReservations.Foreground = fgBrush;
+
+                if (brushConverter.ConvertFromString(Config.Data.ScrollBarColor) is SolidColorBrush sb)
+                {
+                    Resources["ScrollBarBrush"] = sb;
+                }
+                
+                var colBorderBrush = (SolidColorBrush?)brushConverter.ConvertFromString(Config.Data.ColumnBorderColor) ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(68, 68, 68));
+                Resources["ColumnBorderBrush"] = colBorderBrush;
+                if (MainBorder.Resources.Contains("ColumnBorderBrush"))
+                {
+                    MainBorder.Resources["ColumnBorderBrush"] = colBorderBrush;
+                }
+
+                if (brushConverter.ConvertFromString(Config.Data.FooterColor) is SolidColorBrush fBrush)
+                {
+                    if (LblStatus != null) LblStatus.Foreground = fBrush;
+                }
+
+                HeaderTitle.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(136, 204, 255));
+                
                 try
                 {
-                    object converted = brushConverter.ConvertFromString(Config.Data.BackgroundColor);
-                    if (converted is SolidColorBrush b)
-                    {
-                        bgBrush = b;
-                        bgBrush.Opacity = Config.Data.Opacity;
-                        MainBorder.Background = bgBrush;
-                    }
+                    var mainBorderBrush = (SolidColorBrush?)brushConverter.ConvertFromString(Config.Data.MainBorderColor) 
+                                          ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(85, 85, 85));
+                    mainBorderBrush.Opacity = Config.Data.Opacity;
+                    MainBorder.BorderBrush = mainBorderBrush;
                 }
-                catch { }
-
-                var fgBrush = new SolidColorBrush(Colors.White);
-                try
+                catch
                 {
-                    object converted = brushConverter.ConvertFromString(Config.Data.ForegroundColor);
-                    if (converted is SolidColorBrush b)
-                    {
-                        fgBrush = b;
-                        LstReservations.Foreground = fgBrush;
-                    }
+                    var defBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(85, 85, 85)) { Opacity = Config.Data.Opacity };
+                    MainBorder.BorderBrush = defBrush;
                 }
-                catch { }
-
-                try 
-                {
-                    object converted = brushConverter.ConvertFromString(Config.Data.ScrollBarColor);
-                    if (converted is SolidColorBrush sb)
-                    {
-                        this.Resources["ScrollBarBrush"] = sb;
-                    }
-                }
-                catch { }
                 
-                var colBorderBrush = new SolidColorBrush(Color.FromRgb(68, 68, 68));
-                try 
-                {
-                    var converter = new BrushConverter();
-                    var converted = (SolidColorBrush)converter.ConvertFromString(Config.Data.ColumnBorderColor);
-                    if (converted != null)
-                    {
-                        colBorderBrush = converted;
-                    }
-                    if (MainBorder.Resources.Contains("ColumnBorderBrush"))
-                    {
-                        MainBorder.Resources["ColumnBorderBrush"] = colBorderBrush;
-                    }
-                    this.Resources["ColumnBorderBrush"] = colBorderBrush;
-
-                    var fBrush = (SolidColorBrush)converter.ConvertFromString(Config.Data.FooterColor);
-                    LblStatus.Foreground = fBrush;
-                } 
-                catch { }
-
-                HeaderTitle.Foreground = new SolidColorBrush(Color.FromRgb(136, 204, 255));
-
-                var borderBrush = new SolidColorBrush(Color.FromRgb(85, 85, 85));
-                borderBrush.Opacity = Config.Data.Opacity;
-                MainBorder.BorderBrush = borderBrush;
-                
-                LstReservations.Margin = new Thickness(
-                    Config.Data.ListMarginLeft, 
-                    Config.Data.ListMarginTop, 
-                    Config.Data.ListMarginRight, 
-                    Config.Data.ListMarginBottom
-                );
-                
-                // ツールチップのスタイル設定（幅固定・折り返し・配色）
                 var toolTipStyle = new Style(typeof(System.Windows.Controls.ToolTip));
                 toolTipStyle.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, Config.Data.ToolTipWidth));
-                
                 try
                 {
-                    toolTipStyle.Setters.Add(new Setter(Control.FontSizeProperty, Config.Data.ToolTipFontSize));
-
-                    var bgObj = brushConverter.ConvertFromString(Config.Data.ToolTipBackColor);
-                    if (bgObj is SolidColorBrush ttBgBrush)
-                        toolTipStyle.Setters.Add(new Setter(Control.BackgroundProperty, ttBgBrush));
-
-                    var fgObj = brushConverter.ConvertFromString(Config.Data.ToolTipForeColor);
-                    if (fgObj is SolidColorBrush ttFgBrush)
-                        toolTipStyle.Setters.Add(new Setter(Control.ForegroundProperty, ttFgBrush));
-
-                    var borderObj = brushConverter.ConvertFromString(Config.Data.ToolTipBorderColor);
-                    if (borderObj is SolidColorBrush ttBorderBrush)
-                        toolTipStyle.Setters.Add(new Setter(Control.BorderBrushProperty, ttBorderBrush));
+                    toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.Control.FontSizeProperty, Config.Data.ToolTipFontSize));
+                    if (brushConverter.ConvertFromString(Config.Data.ToolTipBackColor) is SolidColorBrush ttBg)
+                        toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, ttBg));
+                    if (brushConverter.ConvertFromString(Config.Data.ToolTipForeColor) is SolidColorBrush ttFg)
+                        toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.Control.ForegroundProperty, ttFg));
+                    if (brushConverter.ConvertFromString(Config.Data.ToolTipBorderColor) is SolidColorBrush ttBorder)
+                        toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.Control.BorderBrushProperty, ttBorder));
                 }
                 catch 
                 {
-                    // デフォルトフォールバック（設定読み込み失敗時）
-                    toolTipStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Color.FromRgb(30, 30, 30))));
-                    toolTipStyle.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.White));
-                    toolTipStyle.Setters.Add(new Setter(Control.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(100, 100, 100))));
+                    toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, new SolidColorBrush(System.Windows.Media.Color.FromRgb(30, 30, 30))));
+                    toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.Control.ForegroundProperty, System.Windows.Media.Brushes.White));
+                    toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.Control.BorderBrushProperty, new SolidColorBrush(System.Windows.Media.Color.FromRgb(100, 100, 100))));
                 }
-                
-                // テキストの折り返し設定
                 var ttTemplate = new DataTemplate();
-                var ttText = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
-                ttText.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new Binding());
-                ttText.SetValue(System.Windows.Controls.TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+                var ttText = new FrameworkElementFactory(typeof(TextBlock));
+                ttText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding());
+                ttText.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
                 ttTemplate.VisualTree = ttText;
-                
-                toolTipStyle.Setters.Add(new Setter(ContentControl.ContentTemplateProperty, ttTemplate));
-                
-                // ウィンドウのリソースとして登録
-                this.Resources[typeof(System.Windows.Controls.ToolTip)] = toolTipStyle;
+                toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.ContentControl.ContentTemplateProperty, ttTemplate));
+                Resources[typeof(System.Windows.Controls.ToolTip)] = toolTipStyle;
 
-                var itemStyle = new Style(typeof(ListViewItem));
-                itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
-                if (Config.Data.ShowToolTip)
-                {
-                    itemStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding("ToolTipText")));
-                }
-                itemStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+                var itemStyle = new Style(typeof(System.Windows.Controls.ListViewItem));
+                itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
+                if (Config.Data.ShowToolTip) itemStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new System.Windows.Data.Binding("ToolTipText")));
+                itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.BorderThicknessProperty, new Thickness(0)));
                 itemStyle.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(-1, 0, 0, 0)));
-                itemStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
-                itemStyle.Setters.Add(new Setter(Control.MinHeightProperty, 0.0));
-                itemStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, System.Windows.HorizontalAlignment.Stretch));
-                itemStyle.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, System.Windows.VerticalAlignment.Center));
-
-                itemStyle.Setters.Add(new EventSetter(Control.MouseDoubleClickEvent, new MouseButtonEventHandler(listView_MouseDoubleClick)));
+                itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.PaddingProperty, new Thickness(0)));
+                itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.MinHeightProperty, 0.0));
+                itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.HorizontalContentAlignmentProperty, System.Windows.HorizontalAlignment.Stretch));
+                itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+                itemStyle.Setters.Add(new EventSetter(System.Windows.Controls.Control.MouseDoubleClickEvent, new MouseButtonEventHandler(listView_MouseDoubleClick)));
 
                 try
                 {
-                    object recConv = brushConverter.ConvertFromString(Config.Data.RecColor);
-                    if (recConv is SolidColorBrush recBrush)
+                    if (brushConverter.ConvertFromString(Config.Data.RecColor) is SolidColorBrush recBrush)
                     {
                         MainBorder.Resources["RecBrush"] = recBrush;
                         var recWeight = Config.Data.RecBold ? FontWeights.Bold : FontWeights.Normal;
                         MainBorder.Resources["RecWeight"] = recWeight;
-
-                        var recTrigger = new DataTrigger { Binding = new Binding("IsRecording"), Value = true };
-                        recTrigger.Setters.Add(new Setter(Control.ForegroundProperty, recBrush));
-                        recTrigger.Setters.Add(new Setter(Control.FontWeightProperty, recWeight));
+                        var recTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsRecording"), Value = true };
+                        recTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.ForegroundProperty, recBrush));
+                        recTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.FontWeightProperty, recWeight));
                         itemStyle.Triggers.Add(recTrigger);
                     }
-                    
-                    object disConv = brushConverter.ConvertFromString(Config.Data.DisabledColor);
-                    if (disConv is SolidColorBrush disabledBrush)
+                    if (brushConverter.ConvertFromString(Config.Data.DisabledColor) is SolidColorBrush disabledBrush)
                     {
                         MainBorder.Resources["DisabledBrush"] = disabledBrush;
-                        var disabledTrigger = new DataTrigger { Binding = new Binding("IsDisabled"), Value = true };
-                        disabledTrigger.Setters.Add(new Setter(Control.ForegroundProperty, disabledBrush));
+                        var disabledTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsDisabled"), Value = true };
+                        disabledTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.ForegroundProperty, disabledBrush));
                         itemStyle.Triggers.Add(disabledTrigger);
                     }
-
-                    object errConv = brushConverter.ConvertFromString(Config.Data.ReserveErrorColor);
-                    if (errConv is SolidColorBrush errBrush)
+                    if (brushConverter.ConvertFromString(Config.Data.ReserveErrorColor) is SolidColorBrush errBrush)
                     {
                         MainBorder.Resources["ErrorBrush"] = errBrush;
-                        
-                        var errorTrigger = new DataTrigger { Binding = new Binding("HasError"), Value = true };
-                        errorTrigger.Setters.Add(new Setter(Control.BackgroundProperty, errBrush));
+                        var errorTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("HasError"), Value = true };
+                        errorTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, errBrush));
                         itemStyle.Triggers.Add(errorTrigger);
                     }
                 }
@@ -641,488 +471,361 @@ namespace EDCBMonitor
 
                 double brightness = bgBrush.Color.R * 0.299 + bgBrush.Color.G * 0.587 + bgBrush.Color.B * 0.114;
                 bool isLight = brightness > 128; 
-
-                var selectedTrigger = new Trigger { Property = ListViewItem.IsSelectedProperty, Value = true };
-                var selColor = isLight ? Color.FromArgb(100, 0, 100, 200) : Color.FromArgb(80, 255, 255, 255);
-                selectedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(selColor)));
+                var selectedTrigger = new Trigger { Property = System.Windows.Controls.ListViewItem.IsSelectedProperty, Value = true };
+                var selColor = System.Windows.Media.Color.FromArgb(100, 0, 100, 200);
+                if (!isLight) selColor = System.Windows.Media.Color.FromArgb(80, 255, 255, 255);
+                selectedTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, new SolidColorBrush(selColor)));
                 itemStyle.Triggers.Add(selectedTrigger);
 
-                var mouseOverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-                var hoverColor = isLight ? Color.FromArgb(50, 0, 100, 200) : Color.FromArgb(50, 255, 255, 255);
-                mouseOverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(hoverColor)));
+                var mouseOverTrigger = new Trigger { Property = System.Windows.UIElement.IsMouseOverProperty, Value = true };
+                var hoverColor = isLight ? System.Windows.Media.Color.FromArgb(50, 0, 100, 200) : System.Windows.Media.Color.FromArgb(50, 255, 255, 255);
+                mouseOverTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, new SolidColorBrush(hoverColor)));
                 itemStyle.Triggers.Add(mouseOverTrigger);
 
                 LstReservations.ItemContainerStyle = itemStyle;
+                LstReservations.Margin = new Thickness(Config.Data.ListMarginLeft, Config.Data.ListMarginTop, Config.Data.ListMarginRight, Config.Data.ListMarginBottom);
 
                 RowHeader.Height = Config.Data.ShowHeader ? GridLength.Auto : new GridLength(0);
                 RowFooter.Height = Config.Data.ShowFooter ? GridLength.Auto : new GridLength(0);
                 MainBorder.BorderThickness = new Thickness(1);
 
-                UpdateListColumns();
-                UpdateColumnHeaderStyle(bgBrush, fgBrush, colBorderBrush);
+                _columnManager.UpdateColumns();
+                _columnManager.UpdateHeaderStyle(bgBrush, fgBrush, colBorderBrush);
                 LstReservations.Items.Refresh();
+                ApplyVisualSettings();
             }
-            catch (Exception ex) { Logger.Write("ApplySettings Error: " + ex.Message); }
-        }
-
-        private void UpdateListColumns()
-        {
-            var gv = (GridView)LstReservations.View;
-            gv.Columns.Clear();
-
-            var defs = new List<ColumnDef>();
-            defs.Add(new ColumnDef { Header = "状態", BindingPath = "Status", GetShow = () => Config.Data.ShowColStatus, GetWidth = () => Config.Data.WidthColStatus });
-            defs.Add(new ColumnDef { Header = "日時", BindingPath = "DateTimeInfo", GetShow = () => Config.Data.ShowColDateTime, GetWidth = () => Config.Data.WidthColDateTime });
-            defs.Add(new ColumnDef { Header = "長さ", BindingPath = "Duration", GetShow = () => Config.Data.ShowColDuration, GetWidth = () => Config.Data.WidthColDuration });
-            defs.Add(new ColumnDef { Header = "ネットワーク", BindingPath = "NetworkName", GetShow = () => Config.Data.ShowColNetwork, GetWidth = () => Config.Data.WidthColNetwork });
-            defs.Add(new ColumnDef { Header = "サービス名", BindingPath = "ServiceName", GetShow = () => Config.Data.ShowColServiceName, GetWidth = () => Config.Data.WidthColServiceName });
-            defs.Add(new ColumnDef { Header = "番組名", BindingPath = "Title", GetShow = () => Config.Data.ShowColTitle, GetWidth = () => Config.Data.WidthColTitle });
-            defs.Add(new ColumnDef { Header = "番組内容", BindingPath = "Desc", GetShow = () => Config.Data.ShowColDesc, GetWidth = () => Config.Data.WidthColDesc });
-            defs.Add(new ColumnDef { Header = "ジャンル", BindingPath = "Genre", GetShow = () => Config.Data.ShowColGenre, GetWidth = () => Config.Data.WidthColGenre });
-            defs.Add(new ColumnDef { Header = "付属情報", BindingPath = "ExtraInfo", GetShow = () => Config.Data.ShowColExtraInfo, GetWidth = () => Config.Data.WidthColExtraInfo });
-            
-            defs.Add(new ColumnDef { Header = "有効", BindingPath = "IsEnabledBool", GetShow = () => Config.Data.ShowColEnabled, GetWidth = () => Config.Data.WidthColEnabled });
-            
-            defs.Add(new ColumnDef { Header = "プログラム予約", BindingPath = "ProgramType", GetShow = () => Config.Data.ShowColProgramType, GetWidth = () => Config.Data.WidthColProgramType });
-            defs.Add(new ColumnDef { Header = "予約状況", BindingPath = "Comment", GetShow = () => Config.Data.ShowColComment, GetWidth = () => Config.Data.WidthColComment });
-            defs.Add(new ColumnDef { Header = "エラー状況", BindingPath = "ErrorInfo", GetShow = () => Config.Data.ShowColError, GetWidth = () => Config.Data.WidthColError });
-            defs.Add(new ColumnDef { Header = "予定ファイル名", BindingPath = "RecFileName", GetShow = () => Config.Data.ShowColRecFileName, GetWidth = () => Config.Data.WidthColRecFileName });
-            defs.Add(new ColumnDef { Header = "予定ファイル名リスト", BindingPath = "RecFileNameList", GetShow = () => Config.Data.ShowColRecFileNameList, GetWidth = () => Config.Data.WidthColRecFileNameList });
-            defs.Add(new ColumnDef { Header = "使用予定チューナー", BindingPath = "Tuner", GetShow = () => Config.Data.ShowColTuner, GetWidth = () => Config.Data.WidthColTuner });
-            defs.Add(new ColumnDef { Header = "予想サイズ", BindingPath = "EstSize", GetShow = () => Config.Data.ShowColEstSize, GetWidth = () => Config.Data.WidthColEstSize });
-            defs.Add(new ColumnDef { Header = "プリセット", BindingPath = "Preset", GetShow = () => Config.Data.ShowColPreset, GetWidth = () => Config.Data.WidthColPreset });
-            defs.Add(new ColumnDef { Header = "録画モード", BindingPath = "RecMode", GetShow = () => Config.Data.ShowColRecMode, GetWidth = () => Config.Data.WidthColRecMode });
-            defs.Add(new ColumnDef { Header = "優先度", BindingPath = "Priority", GetShow = () => Config.Data.ShowColPriority, GetWidth = () => Config.Data.WidthColPriority });
-            defs.Add(new ColumnDef { Header = "追従", BindingPath = "Tuijyuu", GetShow = () => Config.Data.ShowColTuijyuu, GetWidth = () => Config.Data.WidthColTuijyuu });
-            defs.Add(new ColumnDef { Header = "ぴったり", BindingPath = "Pittari", GetShow = () => Config.Data.ShowColPittari, GetWidth = () => Config.Data.WidthColPittari });
-            defs.Add(new ColumnDef { Header = "チューナー強制", BindingPath = "TunerForce", GetShow = () => Config.Data.ShowColTunerForce, GetWidth = () => Config.Data.WidthColTunerForce });
-            defs.Add(new ColumnDef { Header = "録画後動作", BindingPath = "RecEndMode", GetShow = () => Config.Data.ShowColRecEndMode, GetWidth = () => Config.Data.WidthColRecEndMode });
-            defs.Add(new ColumnDef { Header = "復帰後再起動", BindingPath = "Reboot", GetShow = () => Config.Data.ShowColReboot, GetWidth = () => Config.Data.WidthColReboot });
-            defs.Add(new ColumnDef { Header = "録画後実行bat", BindingPath = "Bat", GetShow = () => Config.Data.ShowColBat, GetWidth = () => Config.Data.WidthColBat });
-            defs.Add(new ColumnDef { Header = "録画タグ", BindingPath = "RecTag", GetShow = () => Config.Data.ShowColRecTag, GetWidth = () => Config.Data.WidthColRecTag });
-            defs.Add(new ColumnDef { Header = "録画フォルダ", BindingPath = "RecFolder", GetShow = () => Config.Data.ShowColRecFolder, GetWidth = () => Config.Data.WidthColRecFolder });
-            defs.Add(new ColumnDef { Header = "開始", BindingPath = "StartMargin", GetShow = () => Config.Data.ShowColStartMargin, GetWidth = () => Config.Data.WidthColStartMargin });
-            defs.Add(new ColumnDef { Header = "終了", BindingPath = "EndMargin", GetShow = () => Config.Data.ShowColEndMargin, GetWidth = () => Config.Data.WidthColEndMargin });
-            defs.Add(new ColumnDef { Header = "ID", BindingPath = "ID", GetShow = () => Config.Data.ShowColID, GetWidth = () => Config.Data.WidthColID });
-
-
-            if (Config.Data.ColumnHeaderOrder != null && Config.Data.ColumnHeaderOrder.Count > 0)
-            {
-                foreach (string header in Config.Data.ColumnHeaderOrder)
-                {
-                    var d = defs.FirstOrDefault(x => x.Header == header);
-                    if (d != null && d.GetShow())
-                    {
-                        if (d.Header == "有効") AddCheckBoxColumn(gv, d);
-                        else if (d.Header == "日時") AddDateTimeColumn(gv, d);
-                        else AddColumn(gv, d);
-                    }
-                }
-
-                foreach (var d in defs)
-                {
-                    if (d.GetShow() && !Config.Data.ColumnHeaderOrder.Contains(d.Header))
-                    {
-                        if (d.Header == "有効") AddCheckBoxColumn(gv, d);
-                        else if (d.Header == "日時") AddDateTimeColumn(gv, d);
-                        else AddColumn(gv, d);
-                    }
-                }
-            }
-            else
-            {
-                foreach(var d in defs)
-                {
-                    if (d.GetShow())
-                    {
-                        if (d.Header == "有効") AddCheckBoxColumn(gv, d);
-                        else if (d.Header == "日時") AddDateTimeColumn(gv, d);
-                        else AddColumn(gv, d);
-                    }
-                }
-            }
-        }
-
-        private void AddColumn(GridView gv, ColumnDef d)
-        {
-            var col = new GridViewColumn();
-            col.Header = d.Header;
-            col.Width = d.GetWidth();
-            
-            var dataTemplate = new DataTemplate();
-            var factory = new FrameworkElementFactory(typeof(TextBlock));
-            factory.SetBinding(TextBlock.TextProperty, new Binding(d.BindingPath));
-            
-            double left = 2;
-            factory.SetValue(TextBlock.MarginProperty, new Thickness(left, Config.Data.ItemPadding, -6, Config.Data.ItemPadding));
-            
-            dataTemplate.VisualTree = factory;
-            
-            col.CellTemplate = dataTemplate;
-            gv.Columns.Add(col);
-        }
-
-        private void AddCheckBoxColumn(GridView gv, ColumnDef d)
-        {
-            var col = new GridViewColumn();
-            col.Header = d.Header;
-            col.Width = d.GetWidth();
-
-            var dataTemplate = new DataTemplate();
-            var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.CheckBox));
-            factory.SetBinding(ToggleButton.IsCheckedProperty, new Binding(d.BindingPath) { Mode = BindingMode.OneWay });
-            factory.SetValue(Control.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
-            factory.SetValue(Control.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
-            factory.AddHandler(ButtonBase.ClickEvent, new RoutedEventHandler(ReservationCheckBox_Click));
-
-            dataTemplate.VisualTree = factory;
-            col.CellTemplate = dataTemplate;
-            gv.Columns.Add(col);
+            catch (Exception ex) { Logger.Write($"ApplySettings Error: {ex.Message}"); }
         }
         
-        private void AddDateTimeColumn(GridView gv, ColumnDef d)
+        private void ApplyVisualSettings()
         {
-            var col = new GridViewColumn();
-            col.Header = d.Header;
-            col.Width = d.GetWidth();
-
-            var dataTemplate = new DataTemplate();
-            var gridFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Grid));
-
-            // 「進捗バーを省略」していない場合のみバーを追加
-            if (!Config.Data.OmitProgress)
+            try
             {
-                var progressFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.ProgressBar));
-                progressFactory.SetBinding(System.Windows.Controls.Primitives.RangeBase.ValueProperty, new Binding("ProgressValue"));
-                progressFactory.SetValue(System.Windows.Controls.ProgressBar.MinimumProperty, 0.0);
-                progressFactory.SetValue(System.Windows.Controls.ProgressBar.MaximumProperty, 100.0);
-                
-                // デザイン調整（枠なし）
-                progressFactory.SetValue(Control.BorderThicknessProperty, new Thickness(0));
-                progressFactory.SetValue(Control.BackgroundProperty, Brushes.Transparent);
-                
-                try
+                if (FindName("BtnVerticalMax") is System.Windows.Controls.Button btn)
                 {
-                    // 設定された色をそのまま適用（不透明）
-                    var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(Config.Data.ProgressBarColor);
-                    var brush = new SolidColorBrush(color);
-                    progressFactory.SetValue(Control.ForegroundProperty, brush);
+                    string colorCode = Config.Data.FooterBtnColor ?? "#555555";
+                    var brush = new System.Windows.Media.BrushConverter().ConvertFromString(colorCode) as System.Windows.Media.Brush;
+                    btn.Background = brush;
                 }
-                catch
-                {
-                    // パース失敗時のデフォルト色（緑）
-                    progressFactory.SetValue(Control.ForegroundProperty, new SolidColorBrush(System.Windows.Media.Color.FromArgb(255, 0, 255, 0)));
-                }
-
-                progressFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(1, 0, -6, 0));
-                progressFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Stretch);
-                progressFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Stretch);
-                
-                // 下約20%の高さになるように変形
-                progressFactory.SetValue(UIElement.RenderTransformOriginProperty, new Point(0.5, 1.0));
-                progressFactory.SetValue(UIElement.RenderTransformProperty, new System.Windows.Media.ScaleTransform(1.0, 0.20));
-                
-                gridFactory.AppendChild(progressFactory);
             }
-
-            // テキスト表示（前面）
-            var textFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
-            textFactory.SetBinding(System.Windows.Controls.TextBlock.TextProperty, new Binding(d.BindingPath));
-            textFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(2, Config.Data.ItemPadding, -6, Config.Data.ItemPadding));
-            
-            textFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
-            
-            gridFactory.AppendChild(textFactory);
-
-            dataTemplate.VisualTree = gridFactory;
-            col.CellTemplate = dataTemplate;
-            gv.Columns.Add(col);
+            catch
+            {
+                if (FindName("BtnVerticalMax") is System.Windows.Controls.Button btn) btn.Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(68, 68, 68));
+            }
         }
+        #endregion
 
-        // --- ロジックを統合したチェックボックス処理 ---
+        #region Actions & Events
         private async void ReservationCheckBox_Click(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.CheckBox cb && cb.DataContext is ReserveItem item)
             {
-                cb.IsEnabled = false; 
+                cb.IsEnabled = false;
                 bool isChecked = cb.IsChecked == true;
-                uint id = item.ID;
-
-                bool success = await ChangeReservationStatus(id, isChecked);
-                
-                if (success) await UpdateReservations();
+                if (await _reservationService.ToggleReservationStatusAsync(new List<uint> { item.ID }))
+                {
+                    await UpdateReservations();
+                }
                 else 
                 {
-                    cb.IsChecked = !isChecked; 
+                    cb.IsChecked = !isChecked;
                     cb.IsEnabled = true;
                 }
             }
         }
 
-        // --- ロジックを統合した予約状態変更 ---
-        private async Task<bool> ChangeReservationStatus(uint targetID, bool enable)
+        private void BtnVerticalMaximize_Click(object sender, RoutedEventArgs e)
         {
-            return await Task.Run(() =>
+            if (_restoreBounds.HasValue)
             {
+                Top = _restoreBounds.Value.Top;
+                Height = _restoreBounds.Value.Height;
+                _restoreBounds = null; 
+            }
+            else
+            {
+                _restoreBounds = new Rect(Left, Top, Width, Height);
                 try
                 {
-                    var cmd = new CtrlCmdUtil();
-                    var list = new List<ReserveData>();
-                    if (cmd.SendEnumReserve(ref list) == ErrCode.CMD_SUCCESS)
-                    {
-                        var target = list.FirstOrDefault(r => r.ReserveID == targetID);
-                        if (target != null)
-                        {
-                            byte current = target.RecSetting.RecMode;
-                            byte next = current;
-                            bool isCurrentlyEnabled = current <= 4;
+                    var centerPoint = new Drawing.Point((int)(Left + Width / 2), (int)(Top + Height / 2));
+                    var screen = WinForms.Screen.FromPoint(centerPoint);
+                    var dpiY = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
 
-                            if (enable && !isCurrentlyEnabled)
-                            {
-                                // 無効(5-9) -> 有効(0-4)
-                                // RecModeを維持するロジック（current%5）
-                                // 0(全サービス)より1(指定サービス)が無難なため調整
-                                next = (byte)((current % 5)); 
-                                if (next == 0) next = 1; 
-                            }
-                            else if (!enable && isCurrentlyEnabled)
-                            {
-                                // 有効(0-4) -> 無効(5-9)
-                                next = (byte)(current + 5);
-                            }
-                            else
-                            {
-                                return true;
-                            }
-
-                            target.RecSetting.RecMode = next;
-                            var changeList = new List<ReserveData> { target };
-                            return cmd.SendChgReserve(changeList) == ErrCode.CMD_SUCCESS;
-                        }
-                    }
+                    Top = screen.WorkingArea.Top / dpiY;
+                    Height = screen.WorkingArea.Height / dpiY;
                 }
-                catch (Exception ex)
+                catch
                 {
-                    Logger.Write("ChangeReservationStatus Error: " + ex.Message);
+                    Top = SystemParameters.WorkArea.Top;
+                    Height = SystemParameters.WorkArea.Height;
                 }
-                return false;
-            });
-        }
-
-        private ContextMenu CreateHeaderContextMenu()
-        {
-            var menu = new ContextMenu();
-            
-            Action<string, bool, Action<bool>> addItem = (header, current, setAction) => {
-                var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = current };
-                item.Click += (s, e) => {
-                    setAction(item.IsChecked);
-                    SaveCurrentState();
-                    ApplySettings();
-                };
-                menu.Items.Add(item);
-            };
-
-            addItem("状態", Config.Data.ShowColStatus, v => Config.Data.ShowColStatus = v);
-            addItem("日時", Config.Data.ShowColDateTime, v => Config.Data.ShowColDateTime = v);
-            addItem("長さ", Config.Data.ShowColDuration, v => Config.Data.ShowColDuration = v);
-            addItem("ネットワーク", Config.Data.ShowColNetwork, v => Config.Data.ShowColNetwork = v);
-            addItem("サービス名", Config.Data.ShowColServiceName, v => Config.Data.ShowColServiceName = v);
-            addItem("番組名", Config.Data.ShowColTitle, v => Config.Data.ShowColTitle = v);
-            
-            menu.Items.Add(new Separator());
-
-            addItem("番組内容", Config.Data.ShowColDesc, v => Config.Data.ShowColDesc = v);
-            addItem("ジャンル", Config.Data.ShowColGenre, v => Config.Data.ShowColGenre = v);
-            addItem("付属情報", Config.Data.ShowColExtraInfo, v => Config.Data.ShowColExtraInfo = v);
-            addItem("有効/無効", Config.Data.ShowColEnabled, v => Config.Data.ShowColEnabled = v);
-            addItem("プログラム予約", Config.Data.ShowColProgramType, v => Config.Data.ShowColProgramType = v);
-            
-            menu.Items.Add(new Separator());
-
-            addItem("予約状況", Config.Data.ShowColComment, v => Config.Data.ShowColComment = v);
-            addItem("エラー状況", Config.Data.ShowColError, v => Config.Data.ShowColError = v);
-            addItem("予定ファイル名", Config.Data.ShowColRecFileName, v => Config.Data.ShowColRecFileName = v);
-            addItem("予定ファイル名リスト", Config.Data.ShowColRecFileNameList, v => Config.Data.ShowColRecFileNameList = v);
-            
-            menu.Items.Add(new Separator());
-
-            addItem("使用予定チューナー", Config.Data.ShowColTuner, v => Config.Data.ShowColTuner = v);
-            addItem("予想サイズ", Config.Data.ShowColEstSize, v => Config.Data.ShowColEstSize = v);
-            addItem("プリセット", Config.Data.ShowColPreset, v => Config.Data.ShowColPreset = v);
-            addItem("録画モード", Config.Data.ShowColRecMode, v => Config.Data.ShowColRecMode = v);
-            addItem("優先度", Config.Data.ShowColPriority, v => Config.Data.ShowColPriority = v);
-            addItem("追従", Config.Data.ShowColTuijyuu, v => Config.Data.ShowColTuijyuu = v);
-            addItem("ぴったり", Config.Data.ShowColPittari, v => Config.Data.ShowColPittari = v);
-            addItem("チューナー強制", Config.Data.ShowColTunerForce, v => Config.Data.ShowColTunerForce = v);
-            
-            menu.Items.Add(new Separator());
-
-            addItem("録画後動作", Config.Data.ShowColRecEndMode, v => Config.Data.ShowColRecEndMode = v);
-            addItem("復帰後再起動", Config.Data.ShowColReboot, v => Config.Data.ShowColReboot = v);
-            addItem("録画後実行bat", Config.Data.ShowColBat, v => Config.Data.ShowColBat = v);
-            addItem("録画タグ", Config.Data.ShowColRecTag, v => Config.Data.ShowColRecTag = v);
-            addItem("録画フォルダ", Config.Data.ShowColRecFolder, v => Config.Data.ShowColRecFolder = v);
-            addItem("開始", Config.Data.ShowColStartMargin, v => Config.Data.ShowColStartMargin = v);
-            addItem("終了", Config.Data.ShowColEndMargin, v => Config.Data.ShowColEndMargin = v);
-            addItem("ID", Config.Data.ShowColID, v => Config.Data.ShowColID = v);
-
-            return menu;
-        }
-
-        // --- ヘッダーフォントサイズの反映 ---
-        private void UpdateColumnHeaderStyle(Brush bgBrush, Brush fgBrush, Brush borderBrush)
-        {
-            try
-            {
-                var gv = (GridView)LstReservations.View;
-                if (gv == null || bgBrush == null || fgBrush == null) return;
-
-                bool isVisible = Config.Data.ShowListHeader;
-
-                var headerStyle = new Style(typeof(GridViewColumnHeader));
-                
-                // 設定値のフォントサイズを適用
-                headerStyle.Setters.Add(new Setter(Control.FontSizeProperty, Config.Data.HeaderFontSize));
-
-                headerStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, isVisible ? Visibility.Visible : Visibility.Collapsed));
-                headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, bgBrush));
-                headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, fgBrush));
-                
-                headerStyle.Setters.Add(new Setter(Control.BorderBrushProperty, borderBrush));
-                
-                headerStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1, 1, 1, 1)));
-                headerStyle.Setters.Add(new Setter(FrameworkElement.MarginProperty, new Thickness(-1, 0, 0, 1)));
-
-                headerStyle.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, System.Windows.HorizontalAlignment.Left));
-                headerStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(4, 2, 0, 2)));
-                
-                headerStyle.Setters.Add(new Setter(FrameworkElement.ContextMenuProperty, CreateHeaderContextMenu()));
-
-                var paddingTrigger = new Trigger { Property = GridViewColumnHeader.RoleProperty, Value = GridViewColumnHeaderRole.Padding };
-                paddingTrigger.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Collapsed));
-                headerStyle.Triggers.Add(paddingTrigger);
-
-                // XAMLリソースからテンプレートを取得
-                var template = this.FindResource("HeaderTemplate") as ControlTemplate;
-                if (template != null)
-                {
-                    headerStyle.Setters.Add(new Setter(Control.TemplateProperty, template));
-                }
-                
-                gv.ColumnHeaderContainerStyle = headerStyle;
             }
-            catch { }
         }
+        #endregion
 
+        #region File Watcher (Robust Implementation)
         private void SetupFileWatcher()
         {
-            if (_fileWatcher != null) 
-            { 
-                _fileWatcher.Dispose(); 
-                _fileWatcher = null; 
+            _fileWatcher?.Dispose();
+            _fileWatcher = null;
+            _watcherStatusMessage = "";
+
+            if (_reloadDebounceTimer == null)
+            {
+                // リロード時の待機時間を設定（EDCB側の書き込み完了待ち）
+                _reloadDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+                _reloadDebounceTimer.Tick += async (s, e) => 
+                {
+                    if (_reloadDebounceTimer != null) _reloadDebounceTimer.Stop();
+                    // ログ抑制: Logger.Write("File change detected. Updating...");
+                    await UpdateReservations();
+                };
             }
 
-            string path = ReserveTextReader.GetReserveFilePath();
-            if (!string.IsNullOrEmpty(path) && File.Exists(path))
+            // 1. パスの決定ロジック（ユーザー入力を柔軟に解釈）
+            string reservePath = "";
+            string configPath = Config.Data.EdcbInstallPath;
+
+            if (!string.IsNullOrEmpty(configPath))
+            {
+                if (File.Exists(configPath) && Path.GetFileName(configPath).Equals("Reserve.txt", StringComparison.OrdinalIgnoreCase))
+                {
+                    reservePath = configPath;
+                }
+                else if (Directory.Exists(configPath) && File.Exists(Path.Combine(configPath, "Reserve.txt")))
+                {
+                    reservePath = Path.Combine(configPath, "Reserve.txt");
+                }
+                else if (Directory.Exists(configPath) && File.Exists(Path.Combine(configPath, "Setting", "Reserve.txt")))
+                {
+                    reservePath = Path.Combine(configPath, "Setting", "Reserve.txt");
+                }
+            }
+
+            if (string.IsNullOrEmpty(reservePath))
+            {
+                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                 if (File.Exists(Path.Combine(baseDir, "Setting", "Reserve.txt"))) 
+                     reservePath = Path.Combine(baseDir, "Setting", "Reserve.txt");
+                 else 
+                 {
+                     string? parent = Directory.GetParent(baseDir)?.FullName;
+                     if (parent != null && File.Exists(Path.Combine(parent, "Setting", "Reserve.txt"))) 
+                         reservePath = Path.Combine(parent, "Setting", "Reserve.txt");
+                 }
+            }
+
+            if (!string.IsNullOrEmpty(reservePath) && File.Exists(reservePath))
             {
                 try
                 {
-                    string dir = Path.GetDirectoryName(path);
-                    string fileName = Path.GetFileName(path);
-
-                    if (!string.IsNullOrEmpty(dir))
+                    string dir = Path.GetDirectoryName(reservePath)!;
+                    string fileName = Path.GetFileName(reservePath);
+                    
+                    _fileWatcher = new FileSystemWatcher(dir, fileName)
                     {
-                        _fileWatcher = new FileSystemWatcher(dir, fileName);
-                        _fileWatcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName | NotifyFilters.CreationTime;
-                        _fileWatcher.InternalBufferSize = 65536;
+                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName | NotifyFilters.CreationTime,
+                        InternalBufferSize = 65536
+                    };
 
-                        FileSystemEventHandler handler = async (s, e) => { await Dispatcher.InvokeAsync(async () => await HandleFileChange()); };
-                        RenamedEventHandler renamedHandler = async (s, e) => { await Dispatcher.InvokeAsync(async () => await HandleFileChange()); };
-
-                        _fileWatcher.Changed += handler;
-                        _fileWatcher.Created += handler;
-                        _fileWatcher.Renamed += renamedHandler;
-
-                        _fileWatcher.EnableRaisingEvents = true;
-                    }
+                    _fileWatcher.Changed += (s, e) => HandleFileChange();
+                    _fileWatcher.Created += (s, e) => HandleFileChange();
+                    _fileWatcher.Renamed += (s, e) => HandleFileChange();
+                    _fileWatcher.EnableRaisingEvents = true;
+                    
+                    _watcherStatusMessage = ""; 
                 }
                 catch (Exception ex)
                 {
-                    Logger.Write("FileWatcher Error: " + ex.Message);
+                    Logger.Write($"FileWatcher Start Error: {ex.Message}");
+                    _watcherStatusMessage = "監視エラー";
                 }
             }
-        }
-
-        private async Task HandleFileChange()
-        {
-            if ((DateTime.Now - _lastReloadTime).TotalMilliseconds < 500)
+            else
             {
-                return;
+                if (!string.IsNullOrEmpty(configPath))
+                {
+                    Logger.Write($"Reserve.txt not found at configured path: {configPath}");
+                    _watcherStatusMessage = "Reserve.txt 不明";
+                }
             }
-            _lastReloadTime = DateTime.Now;
-            await UpdateReservations();
+            
+            UpdateFooterStatus();
         }
 
-        private async Task<bool> UpdateReservations()
+        private void HandleFileChange()
+        {
+            Dispatcher.Invoke(() => 
+            {
+                _reloadDebounceTimer?.Stop();
+                _reloadDebounceTimer?.Start();
+            });
+        }
+        #endregion
+
+        #region Data Update
+        public async Task RefreshDataAsync() => await UpdateReservations();
+
+        private async Task<bool> UpdateReservations(bool updateFooter = true)
         {
             try
             {
-                var list = await Task.Run(() => ReserveTextReader.Load());
+                PresetManager.Instance.Load();
+                var selectedIds = new HashSet<uint>();
+                if (LstReservations.SelectedItems != null)
+                {
+                    foreach (var item in LstReservations.SelectedItems.OfType<ReserveItem>()) selectedIds.Add(item.ID);
+                }
+
+                var sv = GetScrollViewer(LstReservations);
+                double vOffset = sv?.VerticalOffset ?? 0;
+
+                var list = await _reservationService.GetReservationsAsync();
                 
                 if (list == null)
                 {
-                    LblStatus.Text = "接続待機中...";
+                    if (updateFooter && !_isShowingTempMessage) LblStatus.Text = "接続待機中...";
                     return false;
                 }
 
+                if (Config.Data.EnableTitleRemove && !string.IsNullOrEmpty(Config.Data.TitleRemovePattern))
+                {
+                    try
+                    {
+                        var regex = new System.Text.RegularExpressions.Regex(Config.Data.TitleRemovePattern);
+                        foreach (var item in list) item.Data.Title = regex.Replace(item.Data.Title, "");
+                    }
+                    catch { }
+                }
+
+                if (Config.Data.HideDisabled) list = list.Where(x => !x.IsDisabled).ToList();
+
                 LstReservations.ItemsSource = list;
-                LblStatus.Text = string.Format("更新: {0:HH:mm} ({1}件)", DateTime.Now, list.Count);
+                
+                if (selectedIds.Count > 0)
+                {
+                    foreach (var item in list.Where(x => selectedIds.Contains(x.ID))) LstReservations?.SelectedItems.Add(item);
+                }
+                if (sv != null) sv.ScrollToVerticalOffset(vOffset);
+
+                if (updateFooter) UpdateFooterStatus();
                 return true;
             }
             catch (Exception ex)
             {
-                Logger.Write("Update Error: " + ex.ToString());
-                LblStatus.Text = "エラー発生";
+                Logger.Write($"Update Error: {ex}");
+                if (updateFooter && !_isShowingTempMessage && LblStatus != null) LblStatus.Text = "エラー発生";
                 return false;
             }
         }
-        
-        public async Task RefreshDataAsync()
+
+        private void UpdateFooterStatus()
         {
-            await UpdateReservations();
+            if (_isShowingTempMessage || LblStatus == null) return;
+            
+            string status = "";
+            if (LstReservations.ItemsSource is List<ReserveItem> list)
+            {
+                int validCount = list.Count(x => !x.IsDisabled);
+                status = $"更新: {DateTime.Now:HH:mm} ({validCount}件)";
+            }
+            
+            if (!string.IsNullOrEmpty(_watcherStatusMessage))
+            {
+                status += $" [{_watcherStatusMessage}]";
+            }
+
+            LblStatus.Text = status;
         }
 
-        private void MenuReload_Click(object sender, RoutedEventArgs e) { var t = UpdateReservations(); }
+        private async Task ShowTemporaryMessage(string message)
+        {
+            _isShowingTempMessage = true; 
+            if (LblStatus != null) LblStatus.Text = message;
+            try { await Task.Delay(2000); }
+            finally
+            {
+                _isShowingTempMessage = false; 
+                UpdateFooterStatus(); 
+            }
+        }
+        #endregion
+
+        #region Menu Handlers
+        private void MenuReload_Click(object sender, RoutedEventArgs e) => _ = UpdateReservations();
+        private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
         
-        private void MenuExit_Click(object sender, RoutedEventArgs e) { this.Close(); }
-        
-        private void MenuSettings_Click(object sender, RoutedEventArgs e)
+        private void MenuSettings_Click(object? sender, RoutedEventArgs? e)
         {
             SaveCurrentState();
-
             var win = new SettingsWindow { Owner = this };
             if (win.ShowDialog() == true)
             {
-                ApplySettings();
+                ApplySettings(true);
                 SetupFileWatcher();
-                var t = UpdateReservations();
+                _ = UpdateReservations();
             }
         }
 
         private void ContextMenu_Opened(object sender, RoutedEventArgs e)
         {
-            if (sender is ContextMenu menu)
+            if (sender is System.Windows.Controls.ContextMenu menu)
             {
-                foreach (var item in menu.Items)
+                var selectedItem = LstReservations.SelectedItem as ReserveItem;
+
+                if (MenuItemPlay != null && SepPlay != null)
                 {
-                    if (item is MenuItem mi && mi.Name == "MenuItemHideDisabled")
+                    bool showPlay = selectedItem != null && selectedItem.IsRecording && !string.IsNullOrEmpty(Config.Data.TvTestPath);
+                    MenuItemPlay.Visibility = showPlay ? Visibility.Visible : Visibility.Collapsed;
+                    SepPlay.Visibility = showPlay ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                if (MenuItemOpenFolder != null)
+                {
+                    MenuItemOpenFolder.Items.Clear();
+                    if (selectedItem != null && string.IsNullOrEmpty(selectedItem.RecFolder))
                     {
-                        mi.Header = Config.Data.HideDisabled ? "無効予約を表示する" : "無効予約を表示しない";
-                        break;
+                        // Common.ini から共通録画フォルダを取得してサブメニューに表示
+                        var commonFolders = _reservationService.GetCommonRecFolders();
+                        if (commonFolders.Count > 0)
+                        {
+                            foreach (var folder in commonFolders)
+                            {
+                                var subItem = new System.Windows.Controls.MenuItem { Header = folder };
+                                subItem.Click += (s, args) => ExternalAppHelper.OpenFolder(folder);
+                                MenuItemOpenFolder.Items.Add(subItem);
+                            }
+                        }
                     }
                 }
+                
+                foreach (var item in menu.Items.OfType<MenuItem>())
+                {
+                    if (item.Name == "MenuItemHideDisabled") item.Header = Config.Data.HideDisabled ? "無効予約を表示する" : "無効予約を表示しない";
+                    else if (item.Name == "MenuItemVerticalMax") item.Header = _restoreBounds.HasValue ? "上下最大化を復元する" : "上下最大化にする";
+                }
             }
+        }
+
+        private void MenuPlay_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstReservations.SelectedItem is not ReserveItem item) return;
+            string? recPath = _reservationService.OpenTimeShift(item.ID, out uint ctrlId);
+
+            if (recPath == null)
+            {
+                Logger.Write("SendNwTimeShiftOpen failed. Fallback to path guessing.");
+                if (!string.IsNullOrEmpty(item.RecFolder) && !string.IsNullOrEmpty(item.RecFileName))
+                {
+                    try { recPath = Path.Combine(item.RecFolder, item.RecFileName); } catch { }
+                }
+            }
+            else
+            {
+                _reservationService.CloseNwPlay(ctrlId);
+            }
+
+            ExternalAppHelper.OpenTvTest(recPath ?? "");
         }
 
         private void MenuHideDisabled_Click(object sender, RoutedEventArgs e)
@@ -1132,150 +835,80 @@ namespace EDCBMonitor
                 Config.Data.HideDisabled = !Config.Data.HideDisabled;
                 Config.Save();
                 mi.Header = Config.Data.HideDisabled ? "無効予約を表示する" : "無効予約を表示しない";
-
                 _ = RefreshDataAsync();
             }
         }
 
-        // --- ロジックを統合したメニュー操作 ---
         private async void MenuChgOnOff_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = LstReservations.SelectedItems;
-            if (selectedItems == null || selectedItems.Count == 0) return;
-
-            var targetIDs = new List<uint>();
-            foreach (var item in selectedItems)
-            {
-                try
-                {
-                    if (item != null)
-                    {
-                        dynamic dItem = item;
-                        targetIDs.Add((uint)dItem.ID);
-                    }
-                }
-                catch { }
-            }
-
+            var targetIDs = LstReservations.SelectedItems.OfType<ReserveItem>().Select(x => x.ID).ToList();
             if (targetIDs.Count == 0) return;
 
-            LblStatus.Text = "予約情報を変更中...";
-
-            bool success = await Task.Run(() =>
-            {
-                try
-                {
-                    var cmd = new CtrlCmdUtil();
-                    var list = new List<ReserveData>();
-
-                    if (cmd.SendEnumReserve(ref list) == ErrCode.CMD_SUCCESS)
-                    {
-                        var changeList = new List<ReserveData>();
-
-                        foreach (var data in list)
-                        {
-                           if (targetIDs.Contains(data.ReserveID))
-                           {
-                               byte current = data.RecSetting.RecMode;
-                               byte next;
-
-                               if (current <= 4) 
-                               {
-                                   next = (byte)(5 + (current + 4) % 5);
-                               }
-                               else if (current <= 9) 
-                               {
-                                    next = (byte)((current + 1) % 5);
-                               }
-                               else 
-                               {
-                                   next = 1; 
-                               }
-
-                               data.RecSetting.RecMode = next;
-                               changeList.Add(data);
-                           }
-                       }
-
-                        if (changeList.Count > 0)
-                        {
-                            return cmd.SendChgReserve(changeList) == ErrCode.CMD_SUCCESS;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Write("MenuChgOnOff Error: " + ex.Message);
-                }
-                return false;
-            });
+            _isShowingTempMessage = true;
+            bool success = await _reservationService.ToggleReservationStatusAsync(targetIDs);
 
             if (success)
             {
-                LblStatus.Text = "予約状態を変更しました";
-                await UpdateReservations();
+                await UpdateReservations(false);
+                await ShowTemporaryMessage("予約状態を変更しました");
             }
             else
             {
                 System.Windows.MessageBox.Show("変更に失敗しました。", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
-                LblStatus.Text = "変更に失敗しました";
+                await ShowTemporaryMessage("変更に失敗しました");
             }
         }
         
         private async void MenuDel_Click(object sender, RoutedEventArgs e)
         {
-            var selectedItems = LstReservations.SelectedItems;
-            if (selectedItems == null || selectedItems.Count == 0) return;
-
-            var targetIDs = new List<uint>();
-            foreach (var item in selectedItems)
-            {
-                try
-                {
-                    if (item != null)
-                    {
-                        dynamic dItem = item;
-                        targetIDs.Add((uint)dItem.ID);
-                    }
-                }
-                catch { }
-            }
-
+            var targetIDs = LstReservations.SelectedItems.OfType<ReserveItem>().Select(x => x.ID).ToList();
             if (targetIDs.Count == 0) return;
 
-            var res = System.Windows.MessageBox.Show(
-                string.Format("{0}件の予約を削除しますか？", targetIDs.Count),
-                "削除確認", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (System.Windows.MessageBox.Show($"{targetIDs.Count}件の予約を削除しますか？", "削除確認", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
-            if (res != MessageBoxResult.Yes) return;
-
-            LblStatus.Text = "予約を削除中...";
-
-            bool success = await Task.Run(() =>
-            {
-                try
-                {
-                    var cmd = new CtrlCmdUtil();
-                    var err = cmd.SendDelReserve(targetIDs);
-                    return err == ErrCode.CMD_SUCCESS;
-                }
-                catch (Exception ex)
-                {
-                    Logger.Write("MenuDel: 例外発生\r\n" + ex.ToString()); 
-                    return false;
-                }
-            });
+            _isShowingTempMessage = true;
+            bool success = await _reservationService.DeleteReservationsAsync(targetIDs);
 
             if (success)
             {
-                LblStatus.Text = "予約を削除しました";
-                await UpdateReservations(); 
+                await UpdateReservations(false);
+                await ShowTemporaryMessage("予約を削除しました");
             }
             else
             {
-                System.Windows.MessageBox.Show("削除に失敗しました。\r\n詳細なエラー原因は EDCBMonitor_Log.txt を確認してください。", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
-                LblStatus.Text = "削除に失敗しました";
+                System.Windows.MessageBox.Show("削除に失敗しました。\r\n詳細はログを確認してください。", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                await ShowTemporaryMessage("削除に失敗しました");
             }
         }
+        
+        private void MenuOpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstReservations.SelectedItem is ReserveItem item)
+            {
+                // フォルダ指定がある場合は直接開く
+                // 指定がない(デフォルト)場合は、ContextMenu_Opened で追加されたサブメニューから選択する運用になる
+                if (!string.IsNullOrEmpty(item.RecFolder))
+                {
+                    ExternalAppHelper.OpenFolder(item.RecFolder);
+                }
+            }
+        }
+        #endregion
+
+        #region Helpers
+        private ScrollViewer? GetScrollViewer(DependencyObject o)
+        {
+            if (o is ScrollViewer sv) return sv;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(o); i++)
+            {
+                var child = VisualTreeHelper.GetChild(o, i);
+                if (child != null)
+                {
+                    if (GetScrollViewer(child) is ScrollViewer result) return result;
+                }
+            }
+            return null;
+        }
+        #endregion
     }
 }

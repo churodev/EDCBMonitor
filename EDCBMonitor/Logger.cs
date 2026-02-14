@@ -1,5 +1,7 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
+using System.Diagnostics;
 
 namespace EDCBMonitor;
 
@@ -14,6 +16,9 @@ public static class Logger
             string log = $"[{DateTime.Now:yyyy/MM/dd HH:mm:ss.fff}] {msg}{Environment.NewLine}";
             File.AppendAllText(LogPath, log, Encoding.UTF8);
         }
-        catch { /* 無視 */ }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Logger Failed: {ex.Message}");
+        }
     }
 }
