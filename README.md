@@ -56,8 +56,8 @@ OSのファイル変更通知をフックしEDCB側の予約変動を瞬時に�
 設定画面にてご使用のTVTestの「TVTest.exe」がある場所（パス）を指定してください。
 録画中の予約を右クリックして追っかけ再生を選択するとTVTestが起動して再生します。
 追っかけ再生にはTVTestとTvtPlayの導入が必要です。
-*  ** [https://github.com/DBCTRADO/TVTest](https://github.com/DBCTRADO/TVTest)
-*  ** [https://github.com/xtne6f/TvtPlay](https://github.com/xtne6f/TvtPlay)
+* ** [https://github.com/DBCTRADO/TVTest](https://github.com/DBCTRADO/TVTest)
+* ** [https://github.com/xtne6f/TvtPlay](https://github.com/xtne6f/TvtPlay)
 
 ## ■ 自動起動の設定
 
