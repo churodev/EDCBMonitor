@@ -16,6 +16,16 @@ namespace EDCBMonitor
         private double _opacity = 1.0;
         private bool _hideDisabled = false;
         
+        // --- ミニモード設定 ---
+        private bool _enableMiniMode = false;
+        public bool EnableMiniMode { get => _enableMiniMode; set => SetProperty(ref _enableMiniMode, value); }
+        private double _miniModeScaleX = 50.0;
+        private double _miniModeScaleY = 50.0;
+        private int _miniModeDirection = 1; // 右上固定
+        private int _miniModeDelay = 500;   // 遅延時間(ms)
+        private int _miniModeExpandDelay = 500;
+        public int MiniModeExpandDelay { get => _miniModeExpandDelay; set => SetProperty(ref _miniModeExpandDelay, value); }
+        
         private string _backgroundColor = "#1E1E1E";
         private string _scrollBarColor = "#393939";
         private string _foregroundColor = "#EEEEEE";
@@ -148,6 +158,10 @@ namespace EDCBMonitor
         public bool Topmost { get => _topmost; set => SetProperty(ref _topmost, value); }
         public double Opacity { get => _opacity; set => SetProperty(ref _opacity, value); }
         public bool HideDisabled { get => _hideDisabled; set => SetProperty(ref _hideDisabled, value); }
+        public double MiniModeScaleX { get => _miniModeScaleX; set => SetProperty(ref _miniModeScaleX, value); }
+        public double MiniModeScaleY { get => _miniModeScaleY; set => SetProperty(ref _miniModeScaleY, value); }
+        public int MiniModeDirection { get => _miniModeDirection; set => SetProperty(ref _miniModeDirection, value); }
+        public int MiniModeDelay { get => _miniModeDelay; set => SetProperty(ref _miniModeDelay, value); }
         public string BackgroundColor { get => _backgroundColor; set => SetProperty(ref _backgroundColor, value); }
         public string ScrollBarColor { get => _scrollBarColor; set => SetProperty(ref _scrollBarColor, value); }
         public string ForegroundColor { get => _foregroundColor; set => SetProperty(ref _foregroundColor, value); }
@@ -212,7 +226,7 @@ namespace EDCBMonitor
             string path = ConfigPath;
             string tempPath = path + ".tmp"; // EM_Config.xml.tmp
 
-            // 1. 復旧処理 (try-catchの外で行い、成否に関わらずログを出さない)
+            // 1. 復旧処理 (try-catchの外で行い成否に関わらずログを出さない)
             if (!File.Exists(path) && File.Exists(tempPath))
             {
                 try
@@ -222,7 +236,6 @@ namespace EDCBMonitor
                 catch
                 {
                     // 移動失敗（ファイルロック中など）時は何もしない
-                    // ここでログを出さないことで、ユーザーに不安を与えません
                 }
             }
 
@@ -270,14 +283,8 @@ namespace EDCBMonitor
                     fs.Flush(true); 
                 }
 
-                // 2. 古いファイルを消して、新しいファイルに名前を変える
-                // Replaceメソッドが使える場合はそれが最適だが
-                // 互換性と確実性のために以下の手順で行う
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
-                File.Move(tempPath, path);
+                // 2. 削除の隙間を作らずにアトミックに近い形でファイルを更新する
+                File.Move(tempPath, path, true);
             }
             catch (Exception ex)
             {

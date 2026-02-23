@@ -10,6 +10,8 @@
         TextOptions.TextFormattingMode="Ideal"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
         PreviewMouseMove="Window_PreviewMouseMove"
+        MouseEnter="Window_MouseEnter"
+        MouseLeave="Window_MouseLeave"
         PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp"
         PreviewMouseDoubleClick="Window_PreviewMouseDoubleClick"
         PreviewMouseWheel="Window_PreviewMouseWheel">
@@ -185,7 +187,8 @@
         <Border.ContextMenu>
            <ContextMenu Opened="ContextMenu_Opened">
                 <MenuItem Header="予約←→無効" Click="MenuChgOnOff_Click"/>
-                <MenuItem Header="削除" Click="MenuDel_Click"/> 
+                <MenuItem Header="削除" Click="MenuDel_Click"/>
+                <MenuItem Header="番組詳細をウィンドウ表示" Click="MenuShowDetail_Click"/>
                 <Separator/>
                 <MenuItem Name="MenuItemHideDisabled" Header="無効予約を表示しない" Click="MenuHideDisabled_Click"/>
                 <Separator/>

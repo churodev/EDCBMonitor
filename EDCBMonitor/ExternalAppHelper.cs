@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Windows; // WPFのMessageBox用
+using System.Windows;
 
 namespace EDCBMonitor
 {
@@ -94,10 +94,10 @@ namespace EDCBMonitor
                 string fileNameExt = Path.GetFileName(recPath);
                 string args = cmdTemplate.Replace("$FileNameExt$", fileNameExt).Replace("$FilePath$", recPath);
 
-                // ProcessStartInfo を変数で受けて、WorkingDirectory をセットする
+                // ProcessStartInfo を変数で受けてWorkingDirectory をセットする
                 var psi = new ProcessStartInfo(exePath, args);
                 psi.UseShellExecute = true;
-                psi.WorkingDirectory = Path.GetDirectoryName(exePath); // ← これを追加！
+                psi.WorkingDirectory = Path.GetDirectoryName(exePath);
 
                 Process.Start(psi);
             }
@@ -132,12 +132,31 @@ namespace EDCBMonitor
 
         private static string GetEpgTimerExePath()
         {
-            if (!string.IsNullOrEmpty(Config.Data.EdcbInstallPath))
+            string configPath = Config.Data.EdcbInstallPath;
+            if (!string.IsNullOrEmpty(configPath))
             {
-                string p = Path.Combine(Config.Data.EdcbInstallPath, "EpgTimer.exe");
-                if (File.Exists(p)) return p;
+                // 「Reserve.txt」などのファイルパスを指定していた場合は親ディレクトリを取得する
+                if (File.Exists(configPath) && !File.GetAttributes(configPath).HasFlag(FileAttributes.Directory))
+                {
+                    configPath = Path.GetDirectoryName(configPath) ?? "";
+                }
+
+                if (!string.IsNullOrEmpty(configPath))
+                {
+                    // まず指定されたディレクトリ（またはその親）で探す
+                    string p = Path.Combine(configPath, "EpgTimer.exe");
+                    if (File.Exists(p)) return p;
+
+                    // EdcbInstallPathが Setting フォルダを指しているケースの救済
+                    string parentDir = Directory.GetParent(configPath)?.FullName ?? "";
+                    if (!string.IsNullOrEmpty(parentDir))
+                    {
+                        p = Path.Combine(parentDir, "EpgTimer.exe");
+                        if (File.Exists(p)) return p;
+                    }
+                }
             }
-            
+    
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             if (File.Exists(Path.Combine(baseDir, "EpgTimer.exe"))) return Path.Combine(baseDir, "EpgTimer.exe");
             string parent = Directory.GetParent(baseDir)?.FullName ?? "";

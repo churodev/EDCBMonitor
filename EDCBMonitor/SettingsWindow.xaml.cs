@@ -18,6 +18,8 @@ namespace EDCBMonitor
         {
             InitializeComponent();
             ChkEnableTitleRemove.Click += (s, e) => UpdatePreview(true);
+            SldMiniScaleX.ValueChanged += SldMiniMode_ValueChanged;
+            SldMiniScaleY.ValueChanged += SldMiniMode_ValueChanged;
             ChkHideDisabled.Click += (s, e) => UpdatePreview(true);
             BackupConfig();
             LoadValues();
@@ -86,6 +88,16 @@ namespace EDCBMonitor
 
             TxtScrollV.Text = Config.Data.ScrollAmountVertical.ToString();
             TxtScrollH.Text = Config.Data.ScrollAmountHorizontal.ToString();
+            
+            // ミニモード設定読み込み
+            ChkEnableMiniMode.IsChecked = Config.Data.EnableMiniMode;
+            SldMiniScaleX.Value = Config.Data.MiniModeScaleX;
+            SldMiniScaleY.Value = Config.Data.MiniModeScaleY;
+            CmbMiniDirection.SelectedIndex = Config.Data.MiniModeDirection;
+            // ミリ秒(int) -> 秒(double) に変換して表示
+            TxtMiniDelay.Text = (Config.Data.MiniModeDelay / 1000.0).ToString("0.##");
+            // 展開遅延も同様に表示
+            TxtMiniExpandDelay.Text = (Config.Data.MiniModeExpandDelay / 1000.0).ToString("0.##");
 
             ChkEnableTitleRemove.IsChecked = Config.Data.EnableTitleRemove;
             TxtTitleRemovePattern.Text = Config.Data.TitleRemovePattern;
@@ -195,6 +207,21 @@ namespace EDCBMonitor
             if (int.TryParse(TxtScrollV.Text, out int sv)) Config.Data.ScrollAmountVertical = sv;
             if (int.TryParse(TxtScrollH.Text, out int sh)) Config.Data.ScrollAmountHorizontal = sh;
 
+            // ミニモード設定適用
+            Config.Data.EnableMiniMode = ChkEnableMiniMode.IsChecked == true;
+            Config.Data.MiniModeScaleX = SldMiniScaleX.Value;
+            Config.Data.MiniModeScaleY = SldMiniScaleY.Value;
+            Config.Data.MiniModeDirection = CmbMiniDirection.SelectedIndex;
+            // 秒(double) -> ミリ秒(int) に変換して保存
+            if (double.TryParse(TxtMiniDelay.Text, out double delaySec))
+            {
+                Config.Data.MiniModeDelay = (int)(delaySec * 1000);
+            }
+            // 展開遅延の保存
+            if (double.TryParse(TxtMiniExpandDelay.Text, out double expDelaySec))
+            {
+                Config.Data.MiniModeExpandDelay = (int)(expDelaySec * 1000);
+            }
             Config.Data.ShowHeader = ChkShowHeader.IsChecked == true;
             Config.Data.ShowListHeader = ChkShowListHeader.IsChecked == true;
             Config.Data.ShowFooter = ChkShowFooter.IsChecked == true;
@@ -261,6 +288,15 @@ namespace EDCBMonitor
         private void SldOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdatePreview(false);
         private void SldItemPadding_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdatePreview(false);
         private void SldMargin_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdatePreview(false);
+        private void SldMiniMode_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!_isLoaded) return;
+            ApplyUiToConfig();
+            if (this.Owner is MainWindow mw)
+            {
+                mw.ApplySettings(true);
+            }
+        }
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
@@ -280,7 +316,7 @@ namespace EDCBMonitor
                 RestoreConfig();
                 if (this.Owner is MainWindow mw)
                 {
-                    mw.ApplySettings();
+                    mw.ApplySettings(true);
                     _ = mw.RefreshDataAsync();
                 }
             }
@@ -361,6 +397,18 @@ namespace EDCBMonitor
             {
                 TxtTvTestPath.Text = dlg.FileName;
                 UpdatePreview(false);
+            }
+        }
+
+        // チェックボックスクリック時に即座に反映させる
+        private void ChkEnableMiniMode_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isLoaded) return;
+            ApplyUiToConfig();
+            if (this.Owner is MainWindow mw)
+            {
+                // trueを渡してサイズ・位置更新を強制する
+                mw.ApplySettings(true);
             }
         }
 
