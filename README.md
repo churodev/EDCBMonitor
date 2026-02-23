@@ -28,7 +28,7 @@ EpgTimerを開く回数を削減できます。
 * 別途ランタイムをインストールする必要がなく解凍してそのまま実行可能です。
 
 
-2. **軽量版 (Framework-dependent)**
+2. **軽量 fd版 (Framework-dependent)**
 * 実行には **[.NET Desktop Runtime 8.0 (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)** のインストールが必要です。
 * すでに環境にランタイムが入っている場合はこちらの方がファイルサイズが小さく軽量です。
 
