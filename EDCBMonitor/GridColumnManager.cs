@@ -63,7 +63,7 @@ namespace EDCBMonitor
             }
         }
 
-        public void UpdateHeaderStyle(Brush bg, Brush fg, Brush border)
+        public void UpdateHeaderStyle(Brush bg, Brush fg, Brush border, bool? showListHeader = null)
         {
             if (_listView.View is not GridView gv) return;
 
@@ -71,7 +71,10 @@ namespace EDCBMonitor
             {
                 var headerStyle = new Style(typeof(GridViewColumnHeader));
                 headerStyle.Setters.Add(new Setter(Control.FontSizeProperty, Config.Data.HeaderFontSize));
-                headerStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, Config.Data.ShowListHeader ? Visibility.Visible : Visibility.Collapsed));
+                
+                // 省略された場合は元の設定(Config.Data.ShowListHeader)を使うように変更
+                bool isListHeaderVisible = showListHeader ?? Config.Data.ShowListHeader;
+                headerStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, isListHeaderVisible ? Visibility.Visible : Visibility.Collapsed));
                 headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, bg));
                 headerStyle.Setters.Add(new Setter(Control.ForegroundProperty, fg));
                 headerStyle.Setters.Add(new Setter(Control.BorderBrushProperty, border));
@@ -282,6 +285,9 @@ namespace EDCBMonitor
             {
                 var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = current };
                 item.Click += (s, e) => {
+                    // UI再構築前に現在のカラム幅を保存する
+                    SaveColumnState();
+                    
                     setAction(item.IsChecked);
                     // カラムの状態が変わったので設定を保存
                     Config.Save(); 

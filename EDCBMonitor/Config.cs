@@ -19,13 +19,29 @@ namespace EDCBMonitor
         // --- ミニモード設定 ---
         private bool _enableMiniMode = false;
         public bool EnableMiniMode { get => _enableMiniMode; set => SetProperty(ref _enableMiniMode, value); }
+        private bool _miniShowHeader = false;
+        public bool MiniShowHeader { get => _miniShowHeader; set => SetProperty(ref _miniShowHeader, value); }
+        private bool _miniShowListHeader = false;
+        public bool MiniShowListHeader { get => _miniShowListHeader; set => SetProperty(ref _miniShowListHeader, value); }
+        private bool _miniShowFooter = false;
+        public bool MiniShowFooter { get => _miniShowFooter; set => SetProperty(ref _miniShowFooter, value); }
         private double _miniModeScaleX = 50.0;
         private double _miniModeScaleY = 50.0;
         private int _miniModeDirection = 1; // 右上固定
         private int _miniModeDelay = 500;   // 遅延時間(ms)
         private int _miniModeExpandDelay = 500;
         public int MiniModeExpandDelay { get => _miniModeExpandDelay; set => SetProperty(ref _miniModeExpandDelay, value); }
-        
+
+        // ▼ ミニモード用のリスト余白設定 ▼
+        private double _miniListMarginLeft = 5;
+        public double MiniListMarginLeft { get => _miniListMarginLeft; set { if (SetProperty(ref _miniListMarginLeft, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
+        private double _miniListMarginTop = 5;
+        public double MiniListMarginTop { get => _miniListMarginTop; set { if (SetProperty(ref _miniListMarginTop, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
+        private double _miniListMarginRight = 0;
+        public double MiniListMarginRight { get => _miniListMarginRight; set { if (SetProperty(ref _miniListMarginRight, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
+        private double _miniListMarginBottom = 10;
+        public double MiniListMarginBottom { get => _miniListMarginBottom; set { if (SetProperty(ref _miniListMarginBottom, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
+        [XmlIgnore] public Thickness MiniListMargin => new Thickness(_miniListMarginLeft, _miniListMarginTop, _miniListMarginRight, _miniListMarginBottom);
         private string _backgroundColor = "#1E1E1E";
         private string _scrollBarColor = "#393939";
         private string _foregroundColor = "#EEEEEE";
@@ -68,14 +84,20 @@ namespace EDCBMonitor
         private string _tvTestCmd = ""; 
         public string TvTestCmd { get => _tvTestCmd; set => SetProperty(ref _tvTestCmd, value); }
 
+        private int _doubleClickAction = 0; // 0: EpgTimer, 1: Material WebUI, 2: 動作させない
+        public int DoubleClickAction { get => _doubleClickAction; set => SetProperty(ref _doubleClickAction, value); }
+
+        private string _materialWebUiUrl = "http://localhost:5510/EMWUI/";
+        public string MaterialWebUiUrl { get => _materialWebUiUrl; set => SetProperty(ref _materialWebUiUrl, value); }
+
         private bool _showHeader = true;
         private bool _showListHeader = true;
         private bool _showFooter = true;
 
         public double Top { get; set; } = -10000;
         public double Left { get; set; } = -10000;
-        public double Width { get; set; } = 730;
-        public double Height { get; set; } = 500;
+        public double Width { get; set; } = 660;
+        public double Height { get; set; } = 473;
         public bool IsVerticalMaximized { get; set; } = false;
         public double RestoreTop { get; set; } = -10000;
         public double RestoreHeight { get; set; } = 500;

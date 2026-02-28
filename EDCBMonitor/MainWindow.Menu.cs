@@ -136,12 +136,38 @@ namespace EDCBMonitor
                     try { recPath = Path.Combine(item.RecFolder, item.RecFileName); } catch { }
                 }
             }
-            else
-            {
-                _reservationService.CloseNwPlay(ctrlId);
-            }
 
+            // TVTestを起動
             ExternalAppHelper.OpenTvTest(recPath ?? "");
+
+            // ネットワークストリームを開いた場合、プロセスの終了を待ってからストリームを閉じる
+            if (ctrlId != 0)
+            {
+                Task.Run(async () =>
+                {
+                    // TVTestプロセスが立ち上がるまで少し待機
+                    await Task.Delay(3000);
+                    
+                    try
+                    {
+                        var tvTestProcs = Process.GetProcessesByName("TVTest");
+                        if (tvTestProcs.Length > 0)
+                        {
+                            // 該当プロセスが終了するまで待機
+                            tvTestProcs[0].WaitForExit();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Write($"TVTest Process Monitor Error: {ex.Message}");
+                    }
+                    finally
+                    {
+                        // TVTest終了後、確実にストリーム配信を停止する
+                        _reservationService.CloseNwPlay(ctrlId);
+                    }
+                });
+            }
         }
 
         private void MenuHideDisabled_Click(object sender, RoutedEventArgs e)
@@ -204,6 +230,19 @@ namespace EDCBMonitor
             {
                 ShowDetailWindow(res);
             }
+        }
+
+        private void MenuOpenEpgTimer_Click(object sender, RoutedEventArgs e)
+        {
+            // 選択状態に関わらず EpgTimer 本体をアクティブにする(起動する)
+            ExternalAppHelper.ActivateOrLaunchEpgTimer();
+        }
+
+        private void MenuOpenWebUI_Click(object sender, RoutedEventArgs e)
+        {
+            // 選択されている番組があればそのIDを渡し、なければ null を渡す
+            var selectedItem = LstReservations.SelectedItem as ReserveItem;
+            ExternalAppHelper.OpenMaterialWebUi(Config.Data.MaterialWebUiUrl, selectedItem?.ID);
         }
 
         private void MenuOpenFolder_Click(object sender, RoutedEventArgs e)

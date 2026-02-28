@@ -54,6 +54,31 @@ namespace EDCBMonitor
             }
         }
 
+        public static void OpenMaterialWebUi(string urlTemplate, uint? reserveId)
+        {
+            if (string.IsNullOrEmpty(urlTemplate))
+            {
+                System.Windows.MessageBox.Show("設定画面で EDCB Material WebUI のURLを指定してください。", "設定未完了", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                string url = urlTemplate;
+                // $id$ があれば予約IDに置換する
+                if (reserveId.HasValue && url.Contains("$id$"))
+                {
+                    url = url.Replace("$id$", reserveId.Value.ToString());
+                }
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Logger.Write($"Material WebUI Launch Error: {ex.Message}");
+                System.Windows.MessageBox.Show($"ブラウザの起動に失敗しました。\n{ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         public static void OpenTvTest(string recPath)
         {
             string exePath = Config.Data.TvTestPath;

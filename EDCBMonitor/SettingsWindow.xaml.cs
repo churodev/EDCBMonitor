@@ -91,6 +91,9 @@ namespace EDCBMonitor
             
             // ミニモード設定読み込み
             ChkEnableMiniMode.IsChecked = Config.Data.EnableMiniMode;
+            ChkMiniShowHeader.IsChecked = Config.Data.MiniShowHeader;
+            ChkMiniShowListHeader.IsChecked = Config.Data.MiniShowListHeader;
+            ChkMiniShowFooter.IsChecked = Config.Data.MiniShowFooter;
             SldMiniScaleX.Value = Config.Data.MiniModeScaleX;
             SldMiniScaleY.Value = Config.Data.MiniModeScaleY;
             CmbMiniDirection.SelectedIndex = Config.Data.MiniModeDirection;
@@ -98,6 +101,14 @@ namespace EDCBMonitor
             TxtMiniDelay.Text = (Config.Data.MiniModeDelay / 1000.0).ToString("0.##");
             // 展開遅延も同様に表示
             TxtMiniExpandDelay.Text = (Config.Data.MiniModeExpandDelay / 1000.0).ToString("0.##");
+            
+            SldMiniMarginLeft.Value = Config.Data.MiniListMarginLeft;
+            SldMiniMarginTop.Value = Config.Data.MiniListMarginTop;
+            SldMiniMarginRight.Value = Config.Data.MiniListMarginRight;
+            SldMiniMarginBottom.Value = Config.Data.MiniListMarginBottom;
+
+            CmbDoubleClickAction.SelectedIndex = Config.Data.DoubleClickAction;
+            TxtMaterialWebUiUrl.Text = Config.Data.MaterialWebUiUrl;
 
             ChkEnableTitleRemove.IsChecked = Config.Data.EnableTitleRemove;
             TxtTitleRemovePattern.Text = Config.Data.TitleRemovePattern;
@@ -209,6 +220,9 @@ namespace EDCBMonitor
 
             // ミニモード設定適用
             Config.Data.EnableMiniMode = ChkEnableMiniMode.IsChecked == true;
+            Config.Data.MiniShowHeader = ChkMiniShowHeader.IsChecked == true;
+            Config.Data.MiniShowListHeader = ChkMiniShowListHeader.IsChecked == true;
+            Config.Data.MiniShowFooter = ChkMiniShowFooter.IsChecked == true;
             Config.Data.MiniModeScaleX = SldMiniScaleX.Value;
             Config.Data.MiniModeScaleY = SldMiniScaleY.Value;
             Config.Data.MiniModeDirection = CmbMiniDirection.SelectedIndex;
@@ -222,6 +236,14 @@ namespace EDCBMonitor
             {
                 Config.Data.MiniModeExpandDelay = (int)(expDelaySec * 1000);
             }
+            
+            Config.Data.MiniListMarginLeft = SldMiniMarginLeft.Value;
+            Config.Data.MiniListMarginTop = SldMiniMarginTop.Value;
+            Config.Data.MiniListMarginRight = SldMiniMarginRight.Value;
+            Config.Data.MiniListMarginBottom = SldMiniMarginBottom.Value;
+
+            Config.Data.DoubleClickAction = CmbDoubleClickAction.SelectedIndex;
+            Config.Data.MaterialWebUiUrl = TxtMaterialWebUiUrl.Text;
             Config.Data.ShowHeader = ChkShowHeader.IsChecked == true;
             Config.Data.ShowListHeader = ChkShowListHeader.IsChecked == true;
             Config.Data.ShowFooter = ChkShowFooter.IsChecked == true;

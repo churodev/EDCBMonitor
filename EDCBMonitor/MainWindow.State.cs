@@ -83,24 +83,51 @@ namespace EDCBMonitor
             }
         }
 
+        private void HandleDoubleClick(ReserveItem? item)
+        {
+            if (Config.Data.DoubleClickAction == 2) // 2: 動作させない
+            {
+                return;
+            }
+            else if (Config.Data.DoubleClickAction == 1) // 1: Material WebUI
+            {
+                ExternalAppHelper.OpenMaterialWebUi(Config.Data.MaterialWebUiUrl, item?.ID);
+            }
+            else // 0: EpgTimer
+            {
+                ExternalAppHelper.ActivateOrLaunchEpgTimer();
+            }
+        }
+
         private void Window_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             DependencyObject? obj = e.OriginalSource as DependencyObject;
             while (obj != null)
             {
                 if (obj is System.Windows.Controls.Primitives.ButtonBase || obj is System.Windows.Controls.Primitives.Thumb || obj is System.Windows.Controls.TextBox) return;
-                if (obj is System.Windows.Controls.ListViewItem)
+                if (obj is System.Windows.Controls.ListViewItem lvi)
                 {
-                    ExternalAppHelper.ActivateOrLaunchEpgTimer();
+                    HandleDoubleClick(lvi.DataContext as ReserveItem);
                     e.Handled = true;
                     return;
                 }
                 obj = VisualTreeHelper.GetParent(obj);
             }
-            ExternalAppHelper.ActivateOrLaunchEpgTimer();
+            HandleDoubleClick(null);
+            e.Handled = true; // 余白ダブルクリック時もイベントをここで止める
         }
 
-        private void listView_MouseDoubleClick(object sender, MouseButtonEventArgs e) => ExternalAppHelper.ActivateOrLaunchEpgTimer();
+        private void listView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is System.Windows.Controls.ListViewItem lvi)
+            {
+                HandleDoubleClick(lvi.DataContext as ReserveItem);
+            }
+            else
+            {
+                HandleDoubleClick(null);
+            }
+        }
 
         private bool IsInteractiveControl(DependencyObject? obj)
         {
@@ -385,6 +412,7 @@ namespace EDCBMonitor
 
         private void UpdateMiniModeState(bool enterMiniMode)
         {
+            _columnManager.SaveColumnState();
             if (enterMiniMode)
             {
                 // ミニモードへ移行（縮小）
@@ -458,6 +486,7 @@ namespace EDCBMonitor
                 }
                 
                 _isMiniMode = true;
+                ApplySettings(false); // UI切り替えのため設定再適用
             }
             else
             {
@@ -500,6 +529,7 @@ namespace EDCBMonitor
                 }
                 
                 _isMiniMode = false;
+                ApplySettings(false); // UI切り替えのため設定再適用
             }
         }
 

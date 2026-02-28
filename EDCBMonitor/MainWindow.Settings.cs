@@ -162,7 +162,6 @@ namespace EDCBMonitor
                 itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.MinHeightProperty, 0.0));
                 itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.HorizontalContentAlignmentProperty, System.Windows.HorizontalAlignment.Stretch));
                 itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
-                itemStyle.Setters.Add(new EventSetter(System.Windows.Controls.Control.MouseDoubleClickEvent, new MouseButtonEventHandler(listView_MouseDoubleClick)));
 
                 try
                 {
@@ -207,14 +206,28 @@ namespace EDCBMonitor
                 itemStyle.Triggers.Add(mouseOverTrigger);
 
                 LstReservations.ItemContainerStyle = itemStyle;
-                LstReservations.Margin = new Thickness(Config.Data.ListMarginLeft, Config.Data.ListMarginTop, Config.Data.ListMarginRight, Config.Data.ListMarginBottom);
+                
+                double mLeft = _isMiniMode ? Config.Data.MiniListMarginLeft : Config.Data.ListMarginLeft;
+                double mTop = _isMiniMode ? Config.Data.MiniListMarginTop : Config.Data.ListMarginTop;
+                double mRight = _isMiniMode ? Config.Data.MiniListMarginRight : Config.Data.ListMarginRight;
+                double mBottom = _isMiniMode ? Config.Data.MiniListMarginBottom : Config.Data.ListMarginBottom;
+                LstReservations.Margin = new Thickness(mLeft, mTop, mRight, mBottom);
 
-                RowHeader.Height = Config.Data.ShowHeader ? GridLength.Auto : new GridLength(0);
-                RowFooter.Height = Config.Data.ShowFooter ? GridLength.Auto : new GridLength(0);
+                bool showHeader = _isMiniMode ? Config.Data.MiniShowHeader : Config.Data.ShowHeader;
+                bool showFooter = _isMiniMode ? Config.Data.MiniShowFooter : Config.Data.ShowFooter;
+                bool showListHeader = _isMiniMode ? Config.Data.MiniShowListHeader : Config.Data.ShowListHeader;
+
+                RowHeader.Height = showHeader ? GridLength.Auto : new GridLength(0);
+                RowFooter.Height = showFooter ? GridLength.Auto : new GridLength(0);
+
+                // 枠組み自体を完全に非表示にし、ボタン等のはみ出し描画を防ぐ
+                if (FindName("HeaderGrid") is Grid hGrid) hGrid.Visibility = showHeader ? Visibility.Visible : Visibility.Collapsed;
+                if (FindName("FooterGrid") is Grid fGrid) fGrid.Visibility = showFooter ? Visibility.Visible : Visibility.Collapsed;
+
                 MainBorder.BorderThickness = new Thickness(1);
 
                 _columnManager.UpdateColumns();
-                _columnManager.UpdateHeaderStyle(bgBrush, fgBrush, colBorderBrush);
+                _columnManager.UpdateHeaderStyle(bgBrush, fgBrush, colBorderBrush, showListHeader);
                 LstReservations.Items.Refresh();
                 ApplyVisualSettings();
             }
