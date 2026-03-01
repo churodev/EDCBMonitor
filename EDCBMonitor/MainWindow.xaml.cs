@@ -175,7 +175,7 @@ namespace EDCBMonitor
             _notifyIcon = new WinForms.NotifyIcon
             {
                 Text = "EDCB Monitor",
-                Visible = true
+                Visible = Config.Data.ShowTrayIcon
             };
 
             var menu = new WinForms.ContextMenuStrip();

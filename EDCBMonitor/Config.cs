@@ -13,6 +13,8 @@ namespace EDCBMonitor
     {
         private string _edcbInstallPath = "";
         private bool _topmost = false;
+        private bool _showTrayIcon = true;
+        public bool ShowTrayIcon { get => _showTrayIcon; set => SetProperty(ref _showTrayIcon, value); }
         private double _opacity = 1.0;
         private bool _hideDisabled = false;
         
@@ -32,7 +34,7 @@ namespace EDCBMonitor
         private int _miniModeExpandDelay = 500;
         public int MiniModeExpandDelay { get => _miniModeExpandDelay; set => SetProperty(ref _miniModeExpandDelay, value); }
 
-        // ▼ ミニモード用のリスト余白設定 ▼
+        // ミニモード用のリスト余白設定
         private double _miniListMarginLeft = 5;
         public double MiniListMarginLeft { get => _miniListMarginLeft; set { if (SetProperty(ref _miniListMarginLeft, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
         private double _miniListMarginTop = 5;
@@ -97,7 +99,7 @@ namespace EDCBMonitor
         public double Top { get; set; } = -10000;
         public double Left { get; set; } = -10000;
         public double Width { get; set; } = 660;
-        public double Height { get; set; } = 473;
+        public double Height { get; set; } = 477;
         public bool IsVerticalMaximized { get; set; } = false;
         public double RestoreTop { get; set; } = -10000;
         public double RestoreHeight { get; set; } = 500;

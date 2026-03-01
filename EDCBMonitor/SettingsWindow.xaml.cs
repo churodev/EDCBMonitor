@@ -54,6 +54,7 @@ namespace EDCBMonitor
         {
             TxtPath.Text = Config.Data.EdcbInstallPath;
             ChkTopmost.IsChecked = Config.Data.Topmost;
+            ChkShowTrayIcon.IsChecked = Config.Data.ShowTrayIcon;
             ChkHideDisabled.IsChecked = Config.Data.HideDisabled;
             SldOpacity.Value = Config.Data.Opacity;
             
@@ -177,6 +178,7 @@ namespace EDCBMonitor
         {
             Config.Data.EdcbInstallPath = TxtPath.Text;
             Config.Data.Topmost = ChkTopmost.IsChecked == true;
+            Config.Data.ShowTrayIcon = ChkShowTrayIcon.IsChecked == true;
             Config.Data.HideDisabled = ChkHideDisabled.IsChecked == true;
             Config.Data.Opacity = SldOpacity.Value;
             

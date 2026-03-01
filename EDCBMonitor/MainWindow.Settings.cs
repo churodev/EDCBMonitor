@@ -66,6 +66,17 @@ namespace EDCBMonitor
 
                 Topmost = Config.Data.Topmost;
 
+                if (Config.Data.ShowTrayIcon)
+                {
+                    ShowInTaskbar = false;
+                    if (_notifyIcon != null) _notifyIcon.Visible = true;
+                }
+                else
+                {
+                    ShowInTaskbar = true;
+                    if (_notifyIcon != null) _notifyIcon.Visible = false;
+                }
+
                 try { FontFamily = new FontFamily(Config.Data.FontFamily); } catch { }
                 FontSize = Config.Data.FontSize;
                 
