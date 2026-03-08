@@ -21,6 +21,8 @@ namespace EDCBMonitor
         // --- ミニモード設定 ---
         private bool _enableMiniMode = false;
         public bool EnableMiniMode { get => _enableMiniMode; set => SetProperty(ref _enableMiniMode, value); }
+        private bool _miniRequireClickToExpand = true;
+        public bool MiniRequireClickToExpand { get => _miniRequireClickToExpand; set => SetProperty(ref _miniRequireClickToExpand, value); }
         private bool _miniShowHeader = false;
         public bool MiniShowHeader { get => _miniShowHeader; set => SetProperty(ref _miniShowHeader, value); }
         private bool _miniShowListHeader = false;
@@ -198,6 +200,10 @@ namespace EDCBMonitor
         public double FontSize { get => _fontSize; set => SetProperty(ref _fontSize, value); }
         public double HeaderFontSize { get => _headerFontSize; set => SetProperty(ref _headerFontSize, value); }
         public double FooterFontSize { get => _footerFontSize; set => SetProperty(ref _footerFontSize, value); }
+        
+        private double _serviceLogoHeight = 16.0;
+        public double ServiceLogoHeight { get => _serviceLogoHeight; set => SetProperty(ref _serviceLogoHeight, value); }
+        
         public double ItemPadding { get => _itemPadding; set => SetProperty(ref _itemPadding, value); }
         
         public double ListMarginLeft { get => _listMarginLeft; set { if (SetProperty(ref _listMarginLeft, value)) OnPropertyChanged(nameof(ListMargin)); } }
@@ -222,6 +228,10 @@ namespace EDCBMonitor
         public bool ShowHeader { get => _showHeader; set => SetProperty(ref _showHeader, value); }
         public bool ShowListHeader { get => _showListHeader; set => SetProperty(ref _showListHeader, value); }
         public bool ShowFooter { get => _showFooter; set => SetProperty(ref _showFooter, value); }
+
+        private bool _showServiceLogo = false;
+        public bool ShowServiceLogo { get => _showServiceLogo; set => SetProperty(ref _showServiceLogo, value); }
+
         public string ColumnBorderColor { get => _columnBorderColor; set => SetProperty(ref _columnBorderColor, value); }
         public string FooterColor { get => _footerColor; set => SetProperty(ref _footerColor, value); }
         public string MainBorderColor { get => _mainBorderColor; set => SetProperty(ref _mainBorderColor, value); }

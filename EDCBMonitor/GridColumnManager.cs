@@ -164,8 +164,40 @@ namespace EDCBMonitor
                 case "有効": AddCheckBoxColumn(gv, d); break;
                 case "日時": AddDateTimeColumn(gv, d); break;
                 case "長さ": AddDurationColumn(gv, d); break;
+                case "サービス名": AddServiceNameColumn(gv, d); break; // 追加
                 default: AddColumn(gv, d); break;
             }
+        }
+
+        // サービス名（ロゴ/テキスト切替）専用の列生成メソッドを追加
+        private void AddServiceNameColumn(GridView gv, ColumnDef d)
+        {
+            var dataTemplate = new DataTemplate();
+            var gridFactory = new FrameworkElementFactory(typeof(Grid));
+            gridFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(2, Config.Data.ItemPadding, -6, Config.Data.ItemPadding));
+
+            // --- 画像（局ロゴ）---
+            var imgFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Image));
+            imgFactory.SetBinding(System.Windows.Controls.Image.SourceProperty, new System.Windows.Data.Binding("ServiceLogo"));
+            imgFactory.SetBinding(UIElement.VisibilityProperty, new System.Windows.Data.Binding("ServiceLogoVisibility"));
+            imgFactory.SetValue(FrameworkElement.HeightProperty, Config.Data.ServiceLogoHeight); 
+            imgFactory.SetValue(System.Windows.Controls.Image.StretchProperty, Stretch.Uniform);
+            imgFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Left);
+            imgFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+            // --- テキスト（サービス名）---
+            var txtFactory = new FrameworkElementFactory(typeof(TextBlock));
+            txtFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(d.BindingPath));
+            txtFactory.SetBinding(UIElement.VisibilityProperty, new System.Windows.Data.Binding("ServiceNameVisibility"));
+            txtFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            txtFactory.SetValue(TextBlock.TextWrappingProperty, TextWrapping.NoWrap);
+            txtFactory.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.None);
+
+            gridFactory.AppendChild(imgFactory);
+            gridFactory.AppendChild(txtFactory);
+
+            dataTemplate.VisualTree = gridFactory;
+            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = d.GetWidth(), CellTemplate = dataTemplate });
         }
 
         private void AddColumn(GridView gv, ColumnDef d)

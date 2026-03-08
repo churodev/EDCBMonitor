@@ -30,33 +30,43 @@ namespace EDCBMonitor
             {
                 if (updateSize)
                 {
-                    if (Config.Data.Width > 0) Width = Config.Data.Width;
-                    if (Config.Data.Height > 0) Height = Config.Data.Height;
-                    Top = Config.Data.Top;
-                    Left = Config.Data.Left;
-
-                // 初期Rectを保存
-                _fullWindowRect = new Rect(Left, Top, Width, Height);
-
-                // 設定フラグを見て状態を更新する
-                if (Config.Data.EnableMiniMode)
-                {
-                    // 有効かつマウス外ならミニモードへ移行するが、
-                    // 「上下最大化(IsVerticalMaximized)」で復元する場合は、
-                    // 起動時に勝手に縮小せず、展開状態(最大化)のまま開始する。
-                    if (!IsMouseOver && !Config.Data.IsVerticalMaximized)
-                    {
-                        UpdateMiniModeState(true);
-                    }
-                }
-                else
-                {
-                    // 無効化された場合、現在ミニモードなら復帰させる
                     if (_isMiniMode)
                     {
-                        UpdateMiniModeState(false);
+                        // ミニモード中は実際のウィンドウサイズ(Width/Height)を直接書き換えない
+                        // フルサイズに戻った時のために _fullWindowRect だけ更新しておく
+                        _fullWindowRect = new Rect(Config.Data.Left, Config.Data.Top, Config.Data.Width, Config.Data.Height);
                     }
-                }
+                    else
+                    {
+                        // ミニモードでない場合は通常通り設定から復元
+                        if (Config.Data.Width > 0) Width = Config.Data.Width;
+                        if (Config.Data.Height > 0) Height = Config.Data.Height;
+                        Top = Config.Data.Top;
+                        Left = Config.Data.Left;
+
+                        // 初期Rectを保存
+                        _fullWindowRect = new Rect(Left, Top, Width, Height);
+                    }
+
+                    // 設定フラグを見て状態を更新する
+                    if (Config.Data.EnableMiniMode)
+                    {
+                        // 有効かつマウス外ならミニモードへ移行するが、
+                        // 「上下最大化(IsVerticalMaximized)」で復元する場合は、
+                        // 起動時に勝手に縮小せず、展開状態(最大化)のまま開始する。
+                        if (!IsMouseOver && !Config.Data.IsVerticalMaximized)
+                        {
+                            UpdateMiniModeState(true);
+                        }
+                    }
+                    else
+                    {
+                        // 無効化された場合、現在ミニモードなら復帰させる
+                        if (_isMiniMode)
+                        {
+                            UpdateMiniModeState(false);
+                        }
+                    }
                 }
                 
                 if (Config.Data.IsVerticalMaximized)

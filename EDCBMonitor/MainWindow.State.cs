@@ -26,6 +26,14 @@ namespace EDCBMonitor
     {
         private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            // ミニモード中で、クリック展開設定がONなら100%に展開する
+            if (_isMiniMode && Config.Data.MiniRequireClickToExpand)
+            {
+                UpdateMiniModeState(false);
+                e.Handled = true;
+                return;
+            }
+
             if (e.OriginalSource is DependencyObject obj && !IsInteractiveControl(obj))
             {
                 LstReservations.UnselectAll();
@@ -314,6 +322,9 @@ namespace EDCBMonitor
             
             if (_isMiniMode)
             {
+                // クリックを条件とする設定がONの場合は、マウスオーバーだけでは展開しない
+                if (Config.Data.MiniRequireClickToExpand) return;
+
                 // 設定された遅延時間で展開
                 if (Config.Data.MiniModeExpandDelay > 0)
                 {
@@ -463,21 +474,14 @@ namespace EDCBMonitor
                 if (newL + newW > vRight) newL = vRight - newW;
                 if (newT + newH > vBottom) newT = vBottom - newH;
 
-                // フラグを立ててから移動・サイズ変更（OnLocationChangedでの誤更新防止）
+                // フラグを立ててから移動・サイズ変更（遅れてくるイベントでの誤更新防止）
                 _isProgrammaticMove = true;
-                try
-                {
-                    Left = newL;
-                    Top = newT;
-                    Width = newW;
-                    Height = newH;
-                }
-                finally
-                {
-                    _isProgrammaticMove = false;
-                }
                 
-                // スクロールバーや余白が見切れるのを防ぐため必要ならここでListViewの見た目を変える等の処理も可能
+                Left = newL;
+                Top = newT;
+                Width = newW;
+                Height = newH;
+                
                 // スクロールバーを非表示にする
                 if (LstReservations != null)
                 {
@@ -487,6 +491,12 @@ namespace EDCBMonitor
                 
                 _isMiniMode = true;
                 ApplySettings(false); // UI切り替えのため設定再適用
+
+                // 画面の描画とOSのサイズ変更完了を確実に待つため、200ミリ秒待機してからフラグを戻す
+                Task.Delay(200).ContinueWith(_ => 
+                {
+                    Dispatcher.Invoke(() => { _isProgrammaticMove = false; });
+                });
             }
             else
             {
@@ -516,20 +526,20 @@ namespace EDCBMonitor
 
                 // フラグを立てて復元
                 _isProgrammaticMove = true;
-                try
-                {
-                    Left = restoreL;
-                    Top = restoreT;
-                    Width = restoreW;
-                    Height = restoreH;
-                }
-                finally
-                {
-                    _isProgrammaticMove = false;
-                }
+                
+                Left = restoreL;
+                Top = restoreT;
+                Width = restoreW;
+                Height = restoreH;
                 
                 _isMiniMode = false;
                 ApplySettings(false); // UI切り替えのため設定再適用
+
+                // 画面の描画とOSのサイズ変更完了を確実に待つため、200ミリ秒待機してからフラグを戻す
+                Task.Delay(200).ContinueWith(_ => 
+                {
+                    Dispatcher.Invoke(() => { _isProgrammaticMove = false; });
+                });
             }
         }
 

@@ -73,6 +73,7 @@ namespace EDCBMonitor
             TxtFontSize.Text = Config.Data.FontSize.ToString();
             TxtHeaderFontSize.Text = Config.Data.HeaderFontSize.ToString();
             TxtFooterFontSize.Text = Config.Data.FooterFontSize.ToString();
+            TxtServiceLogoHeight.Text = Config.Data.ServiceLogoHeight.ToString();
             SldItemPadding.Value = Config.Data.ItemPadding;
             
             SldMarginLeft.Value = Config.Data.ListMarginLeft;
@@ -92,6 +93,7 @@ namespace EDCBMonitor
             
             // ミニモード設定読み込み
             ChkEnableMiniMode.IsChecked = Config.Data.EnableMiniMode;
+            ChkMiniRequireClickToExpand.IsChecked = Config.Data.MiniRequireClickToExpand;
             ChkMiniShowHeader.IsChecked = Config.Data.MiniShowHeader;
             ChkMiniShowListHeader.IsChecked = Config.Data.MiniShowListHeader;
             ChkMiniShowFooter.IsChecked = Config.Data.MiniShowFooter;
@@ -131,6 +133,7 @@ namespace EDCBMonitor
             ChkShowHeader.IsChecked = Config.Data.ShowHeader;
             ChkShowListHeader.IsChecked = Config.Data.ShowListHeader;
             ChkShowFooter.IsChecked = Config.Data.ShowFooter;
+            ChkShowServiceLogo.IsChecked = Config.Data.ShowServiceLogo; // 追加
             
             ChkOmitYear.IsChecked = Config.Data.OmitYear;
             ChkOmitMonth.IsChecked = Config.Data.OmitMonth;
@@ -203,6 +206,7 @@ namespace EDCBMonitor
             if (double.TryParse(TxtFontSize.Text, out double fs)) Config.Data.FontSize = fs;
             if (double.TryParse(TxtHeaderFontSize.Text, out double hfs)) Config.Data.HeaderFontSize = hfs;
             if (double.TryParse(TxtFooterFontSize.Text, out double ffs)) Config.Data.FooterFontSize = ffs;
+            if (double.TryParse(TxtServiceLogoHeight.Text, out double slh)) Config.Data.ServiceLogoHeight = slh;
             Config.Data.ItemPadding = SldItemPadding.Value;
             
             Config.Data.ListMarginLeft = SldMarginLeft.Value;
@@ -222,6 +226,7 @@ namespace EDCBMonitor
 
             // ミニモード設定適用
             Config.Data.EnableMiniMode = ChkEnableMiniMode.IsChecked == true;
+            Config.Data.MiniRequireClickToExpand = ChkMiniRequireClickToExpand.IsChecked == true;
             Config.Data.MiniShowHeader = ChkMiniShowHeader.IsChecked == true;
             Config.Data.MiniShowListHeader = ChkMiniShowListHeader.IsChecked == true;
             Config.Data.MiniShowFooter = ChkMiniShowFooter.IsChecked == true;
@@ -249,6 +254,7 @@ namespace EDCBMonitor
             Config.Data.ShowHeader = ChkShowHeader.IsChecked == true;
             Config.Data.ShowListHeader = ChkShowListHeader.IsChecked == true;
             Config.Data.ShowFooter = ChkShowFooter.IsChecked == true;
+            Config.Data.ShowServiceLogo = ChkShowServiceLogo.IsChecked == true; // 追加
             
             Config.Data.OmitYear = ChkOmitYear.IsChecked == true;
             Config.Data.OmitMonth = ChkOmitMonth.IsChecked == true;

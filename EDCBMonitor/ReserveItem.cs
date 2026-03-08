@@ -29,6 +29,111 @@ namespace EDCBMonitor
         public uint ID => Data.ReserveID;
         public string Title => Data.Title ?? "";
         public string ServiceName => Data.StationName ?? "";
+
+        // キャッシュ用の辞書（局のキーごとに画像を保持）
+        private static readonly System.Collections.Generic.Dictionary<string, ImageSource?> _logoCache = new();
+
+        // 表示切り替え用プロパティ
+        public Visibility ServiceLogoVisibility => ServiceLogo != null ? Visibility.Visible : Visibility.Collapsed;
+        public Visibility ServiceNameVisibility => ServiceLogo != null ? Visibility.Collapsed : Visibility.Visible;
+
+        // 局ロゴ画像プロパティ
+        public ImageSource? ServiceLogo
+        {
+            get
+            {
+                if (!Config.Data.ShowServiceLogo) return null;
+
+                // ONID(4桁大文字)SID(4桁大文字) のキーを作成
+                string cacheKey = $"{Data.OriginalNetworkID:X4}{Data.ServiceID:X4}";
+
+                // 既にキャッシュにあれば、ファイルアクセスせずにそれを即座に返す
+                if (_logoCache.TryGetValue(cacheKey, out var cachedLogo))
+                {
+                    return cachedLogo;
+                }
+
+                ImageSource? loadedLogo = null;
+                string reserveTxtPath = Config.Data.EdcbInstallPath;
+
+                if (!string.IsNullOrEmpty(reserveTxtPath))
+                {
+                    string settingDir = System.IO.Path.GetDirectoryName(reserveTxtPath) ?? "";
+                    string logoDir = System.IO.Path.Combine(settingDir, "LogoData");
+                    string iniPath = System.IO.Path.Combine(settingDir, "LogoData.ini");
+
+                    if (System.IO.Directory.Exists(logoDir))
+                    {
+                        int logoId = -1;
+
+                        if (System.IO.File.Exists(iniPath))
+                        {
+                            try
+                            {
+                                // 文字コード(UTF-16 BOM等)を自動判別して読み込む
+                                using (var sr = new System.IO.StreamReader(iniPath, true))
+                                {
+                                    string? line;
+                                    while ((line = sr.ReadLine()) != null)
+                                    {
+                                        if (line.StartsWith(cacheKey + "="))
+                                        {
+                                            if (int.TryParse(line.Substring(cacheKey.Length + 1).Trim(), out int parsedId))
+                                            {
+                                                logoId = parsedId;
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+
+                        if (logoId >= 0)
+                        {
+                            try
+                            {
+                                string searchPattern = $"{Data.OriginalNetworkID:x4}_{logoId:x3}_*";
+                                string[] files = System.IO.Directory.GetFiles(logoDir, searchPattern);
+
+                                string? selectedFile = null;
+                                string[] preferredSuffixes = { "05.png", "02.png", "04.png", "01.png", "03.png", "00.png", "05.bmp", "02.bmp", "04.bmp", "01.bmp", "03.bmp", "00.bmp" };
+
+                                foreach (var suffix in preferredSuffixes)
+                                {
+                                    selectedFile = files.FirstOrDefault(f => f.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+                                    if (selectedFile != null) break;
+                                }
+
+                                if (selectedFile == null && files.Length > 0)
+                                {
+                                    selectedFile = files[0];
+                                }
+
+                                if (selectedFile != null)
+                                {
+                                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                                    bmp.BeginInit();
+                                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                                    bmp.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
+                                    bmp.UriSource = new Uri(selectedFile);
+                                    bmp.EndInit();
+                                    bmp.Freeze();
+                                    loadedLogo = bmp;
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+
+                // 見つかった画像（無ければnull）をキャッシュに保存して返す
+                _logoCache[cacheKey] = loadedLogo;
+                return loadedLogo;
+            }
+        }
+
         public string NetworkName
         {
             get
