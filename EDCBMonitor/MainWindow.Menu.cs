@@ -57,19 +57,36 @@ namespace EDCBMonitor
             }
         }
 
-        // メニューが表示される直前に呼ばれる。ここでフラグを立てれば縮小を防げる。
-        private void Window_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        // WPFのルーティングイベント用ハンドラ（ウィンドウ全体で一括監視）
+        private void GlobalContextMenu_Opened(object sender, RoutedEventArgs e)
         {
             _isContextMenuOpen = true;
         }
 
+        // ウィンドウ内のすべてのContextMenuが閉じた時に開始する
+        private void GlobalContextMenu_Closed(object sender, RoutedEventArgs e)
+        {
+            _isContextMenuOpen = false;
+            if (!IsMouseOver)
+            {
+                Window_MouseLeave(this, null!);
+            }
+        }
+
+        // 列幅のドラッグなどが終了しマウスのキャプチャが解放された時に開始する
+        private void Global_LostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (!IsMouseOver && !_isContextMenuOpen)
+            {
+                Window_MouseLeave(this, e);
+            }
+        }
+
+        // メインリストビューのコンテキストメニューが開いた時のUI表示切り替え処理
         private void ContextMenu_Opened(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.ContextMenu menu)
             {
-                menu.Closed -= ContextMenu_Closed;
-                menu.Closed += ContextMenu_Closed;
-
                 var selectedItem = LstReservations.SelectedItem as ReserveItem;
 
                 if (MenuItemPlay != null && SepPlay != null)
@@ -84,7 +101,6 @@ namespace EDCBMonitor
                     MenuItemOpenFolder.Items.Clear();
                     if (selectedItem != null && string.IsNullOrEmpty(selectedItem.RecFolder))
                     {
-                        // Common.ini から共通録画フォルダを取得してサブメニューに表示
                         var commonFolders = _reservationService.GetCommonRecFolders();
                         if (commonFolders.Count > 0)
                         {
@@ -103,23 +119,6 @@ namespace EDCBMonitor
                     if (item.Name == "MenuItemHideDisabled") item.Header = Config.Data.HideDisabled ? "無効予約を表示する" : "無効予約を表示しない";
                     else if (item.Name == "MenuItemVerticalMax") item.Header = _restoreBounds.HasValue ? "上下最大化を復元する" : "上下最大化にする";
                 }
-            }
-        }
-
-        // メニューが閉じた時の処理
-        private void ContextMenu_Closed(object sender, RoutedEventArgs e)
-        {
-            _isContextMenuOpen = false;
-            if (sender is System.Windows.Controls.ContextMenu menu)
-            {
-                menu.Closed -= ContextMenu_Closed;
-            }
-
-            // メニューを閉じた時点でマウスが既に外にあるなら縮小処理を開始する
-            // (これをしないと、メニューを閉じた後に縮小されなくなる)
-            if (!IsMouseOver)
-            {
-                Window_MouseLeave(this, null);
             }
         }
 

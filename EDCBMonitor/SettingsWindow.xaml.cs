@@ -133,7 +133,7 @@ namespace EDCBMonitor
             ChkShowHeader.IsChecked = Config.Data.ShowHeader;
             ChkShowListHeader.IsChecked = Config.Data.ShowListHeader;
             ChkShowFooter.IsChecked = Config.Data.ShowFooter;
-            ChkShowServiceLogo.IsChecked = Config.Data.ShowServiceLogo; // 追加
+            ChkShowServiceLogo.IsChecked = Config.Data.ShowServiceLogo;
             
             ChkOmitYear.IsChecked = Config.Data.OmitYear;
             ChkOmitMonth.IsChecked = Config.Data.OmitMonth;
@@ -254,7 +254,7 @@ namespace EDCBMonitor
             Config.Data.ShowHeader = ChkShowHeader.IsChecked == true;
             Config.Data.ShowListHeader = ChkShowListHeader.IsChecked == true;
             Config.Data.ShowFooter = ChkShowFooter.IsChecked == true;
-            Config.Data.ShowServiceLogo = ChkShowServiceLogo.IsChecked == true; // 追加
+            Config.Data.ShowServiceLogo = ChkShowServiceLogo.IsChecked == true;
             
             Config.Data.OmitYear = ChkOmitYear.IsChecked == true;
             Config.Data.OmitMonth = ChkOmitMonth.IsChecked == true;

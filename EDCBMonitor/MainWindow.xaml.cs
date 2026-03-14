@@ -105,7 +105,11 @@ namespace EDCBMonitor
             };
 
             Closing += Window_Closing;
-            ContextMenuOpening += Window_ContextMenuOpening;
+            
+            // WPFのルーティングイベントを用いてウィンドウ全体のメニュー開閉とドラッグ終了を一元管理する
+            this.AddHandler(ContextMenu.OpenedEvent, new RoutedEventHandler(GlobalContextMenu_Opened), true);
+            this.AddHandler(ContextMenu.ClosedEvent, new RoutedEventHandler(GlobalContextMenu_Closed), true);
+            this.AddHandler(UIElement.LostMouseCaptureEvent, new System.Windows.Input.MouseEventHandler(Global_LostMouseCapture), true);
         }
 
         private void LoadAppIcon()

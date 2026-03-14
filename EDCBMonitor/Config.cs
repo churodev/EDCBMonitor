@@ -9,6 +9,20 @@ using System.Windows;
 
 namespace EDCBMonitor
 {
+    // カラムのすべての状態を管理
+    public class ColumnState
+    {
+        public string Header { get; set; } = "";
+        public bool IsVisible { get; set; } = false;
+        public double Width { get; set; } = 100;
+
+        public ColumnState() { }
+        public ColumnState(string header, bool isVisible, double width)
+        {
+            Header = header; IsVisible = isVisible; Width = width;
+        }
+    }
+
     public class ConfigData : INotifyPropertyChanged
     {
         private string _edcbInstallPath = "";
@@ -105,80 +119,125 @@ namespace EDCBMonitor
         public bool IsVerticalMaximized { get; set; } = false;
         public double RestoreTop { get; set; } = -10000;
         public double RestoreHeight { get; set; } = 500;
-        
-        public List<string> ColumnHeaderOrder { get; set; } = new List<string>();
 
-        // EDCB全31項目フラグ
-        public bool ShowColStatus { get; set; } = false;
-        public bool ShowColDateTime { get; set; } = true;
+        // =========================================================
+        // カラム管理システム (単一のマスターリスト)
+        // =========================================================
+        public List<ColumnState> Columns { get; set; } = new List<ColumnState>();
+
+        public ConfigData()
+        {
+        }
+        public void InitDefaults()
+        {
+            var defaultDefs = new List<ColumnState>
+            {
+                new ColumnState("状態", false, 60), new ColumnState("日時", true, 132), new ColumnState("長さ", true, 31),
+                new ColumnState("ネットワーク", false, 70), new ColumnState("サービス名", true, 58), new ColumnState("番組名", true, 460),
+                new ColumnState("番組内容", false, 150), new ColumnState("ジャンル", false, 80), new ColumnState("付属情報", false, 100),
+                new ColumnState("有効", false, 60), new ColumnState("プログラム予約", false, 80), new ColumnState("予約状況", false, 150),
+                new ColumnState("エラー状況", false, 100), new ColumnState("予定ファイル名", false, 150), new ColumnState("予定ファイル名リスト", false, 150),
+                new ColumnState("使用予定チューナー", false, 100), new ColumnState("予想サイズ", false, 70), new ColumnState("プリセット", false, 70),
+                new ColumnState("録画モード", false, 70), new ColumnState("優先度", false, 50), new ColumnState("追従", false, 50),
+                new ColumnState("ぴったり", false, 50), new ColumnState("チューナー強制", false, 80), new ColumnState("録画後動作", false, 80),
+                new ColumnState("復帰後再起動", false, 50), new ColumnState("録画後実行bat", false, 100), new ColumnState("録画タグ", false, 100),
+                new ColumnState("録画フォルダ", false, 100), new ColumnState("開始", false, 80), new ColumnState("終了", false, 80),
+                new ColumnState("ID", false, 50)
+            };
+
+            foreach (var def in defaultDefs)
+            {
+                if (!Columns.Any(c => c.Header == def.Header))
+                {
+                    Columns.Add(def);
+                }
+            }
+        }
+
+        public ColumnState GetColumn(string header)
+        {
+            var col = Columns.FirstOrDefault(c => c.Header == header);
+            if (col == null)
+            {
+                col = new ColumnState(header, false, 100);
+                Columns.Add(col);
+            }
+            return col;
+        }
+
+        // --- EDCB全31項目フラグ (Columnsマスターへのプロキシ) ---
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColStatus { get => GetColumn("状態").IsVisible; set { GetColumn("状態").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColDateTime { get => GetColumn("日時").IsVisible; set { GetColumn("日時").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColDuration { get => GetColumn("長さ").IsVisible; set { GetColumn("長さ").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColNetwork { get => GetColumn("ネットワーク").IsVisible; set { GetColumn("ネットワーク").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColServiceName { get => GetColumn("サービス名").IsVisible; set { GetColumn("サービス名").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColTitle { get => GetColumn("番組名").IsVisible; set { GetColumn("番組名").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColDesc { get => GetColumn("番組内容").IsVisible; set { GetColumn("番組内容").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColGenre { get => GetColumn("ジャンル").IsVisible; set { GetColumn("ジャンル").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColExtraInfo { get => GetColumn("付属情報").IsVisible; set { GetColumn("付属情報").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColEnabled { get => GetColumn("有効").IsVisible; set { GetColumn("有効").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColProgramType { get => GetColumn("プログラム予約").IsVisible; set { GetColumn("プログラム予約").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColComment { get => GetColumn("予約状況").IsVisible; set { GetColumn("予約状況").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColError { get => GetColumn("エラー状況").IsVisible; set { GetColumn("エラー状況").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColRecFileName { get => GetColumn("予定ファイル名").IsVisible; set { GetColumn("予定ファイル名").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColRecFileNameList { get => GetColumn("予定ファイル名リスト").IsVisible; set { GetColumn("予定ファイル名リスト").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColTuner { get => GetColumn("使用予定チューナー").IsVisible; set { GetColumn("使用予定チューナー").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColEstSize { get => GetColumn("予想サイズ").IsVisible; set { GetColumn("予想サイズ").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColPreset { get => GetColumn("プリセット").IsVisible; set { GetColumn("プリセット").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColRecMode { get => GetColumn("録画モード").IsVisible; set { GetColumn("録画モード").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColPriority { get => GetColumn("優先度").IsVisible; set { GetColumn("優先度").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColTuijyuu { get => GetColumn("追従").IsVisible; set { GetColumn("追従").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColPittari { get => GetColumn("ぴったり").IsVisible; set { GetColumn("ぴったり").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColTunerForce { get => GetColumn("チューナー強制").IsVisible; set { GetColumn("チューナー強制").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColRecEndMode { get => GetColumn("録画後動作").IsVisible; set { GetColumn("録画後動作").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColReboot { get => GetColumn("復帰後再起動").IsVisible; set { GetColumn("復帰後再起動").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColBat { get => GetColumn("録画後実行bat").IsVisible; set { GetColumn("録画後実行bat").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColRecTag { get => GetColumn("録画タグ").IsVisible; set { GetColumn("録画タグ").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColRecFolder { get => GetColumn("録画フォルダ").IsVisible; set { GetColumn("録画フォルダ").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColStartMargin { get => GetColumn("開始").IsVisible; set { GetColumn("開始").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColEndMargin { get => GetColumn("終了").IsVisible; set { GetColumn("終了").IsVisible = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public bool ShowColID { get => GetColumn("ID").IsVisible; set { GetColumn("ID").IsVisible = value; OnPropertyChanged(); } }
+
+        // --- EDCB全31項目幅 (Columnsマスターへのプロキシ) ---
+        [System.Xml.Serialization.XmlIgnore] public double WidthColID { get => GetColumn("ID").Width; set { GetColumn("ID").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColStatus { get => GetColumn("状態").Width; set { GetColumn("状態").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColDateTime { get => GetColumn("日時").Width; set { GetColumn("日時").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColDuration { get => GetColumn("長さ").Width; set { GetColumn("長さ").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColNetwork { get => GetColumn("ネットワーク").Width; set { GetColumn("ネットワーク").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColServiceName { get => GetColumn("サービス名").Width; set { GetColumn("サービス名").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColTitle { get => GetColumn("番組名").Width; set { GetColumn("番組名").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColDesc { get => GetColumn("番組内容").Width; set { GetColumn("番組内容").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColGenre { get => GetColumn("ジャンル").Width; set { GetColumn("ジャンル").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColExtraInfo { get => GetColumn("付属情報").Width; set { GetColumn("付属情報").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColEnabled { get => GetColumn("有効").Width; set { GetColumn("有効").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColProgramType { get => GetColumn("プログラム予約").Width; set { GetColumn("プログラム予約").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColComment { get => GetColumn("予約状況").Width; set { GetColumn("予約状況").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColError { get => GetColumn("エラー状況").Width; set { GetColumn("エラー状況").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColRecFileName { get => GetColumn("予定ファイル名").Width; set { GetColumn("予定ファイル名").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColRecFileNameList { get => GetColumn("予定ファイル名リスト").Width; set { GetColumn("予定ファイル名リスト").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColTuner { get => GetColumn("使用予定チューナー").Width; set { GetColumn("使用予定チューナー").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColEstSize { get => GetColumn("予想サイズ").Width; set { GetColumn("予想サイズ").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColPreset { get => GetColumn("プリセット").Width; set { GetColumn("プリセット").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColRecMode { get => GetColumn("録画モード").Width; set { GetColumn("録画モード").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColPriority { get => GetColumn("優先度").Width; set { GetColumn("優先度").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColTuijyuu { get => GetColumn("追従").Width; set { GetColumn("追従").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColPittari { get => GetColumn("ぴったり").Width; set { GetColumn("ぴったり").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColTunerForce { get => GetColumn("チューナー強制").Width; set { GetColumn("チューナー強制").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColRecEndMode { get => GetColumn("録画後動作").Width; set { GetColumn("録画後動作").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColReboot { get => GetColumn("復帰後再起動").Width; set { GetColumn("復帰後再起動").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColBat { get => GetColumn("録画後実行bat").Width; set { GetColumn("録画後実行bat").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColRecTag { get => GetColumn("録画タグ").Width; set { GetColumn("録画タグ").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColRecFolder { get => GetColumn("録画フォルダ").Width; set { GetColumn("録画フォルダ").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColStartMargin { get => GetColumn("開始").Width; set { GetColumn("開始").Width = value; OnPropertyChanged(); } }
+        [System.Xml.Serialization.XmlIgnore] public double WidthColEndMargin { get => GetColumn("終了").Width; set { GetColumn("終了").Width = value; OnPropertyChanged(); } }
+
+        // ※ 以下の設定はColumnsとは無関係なので XmlIgnore を付けない（そのまま保存する）
         public bool OmitProgress { get; set; } = false;
         public bool ShowRemainingTime { get; set; } = false;
         public string FooterBtnColor { get; set; } = "#555555";
-        public bool ShowColDuration { get; set; } = true;
-        public bool ShowColNetwork { get; set; } = false;
-        public bool ShowColServiceName { get; set; } = true;
-        public bool ShowColTitle { get; set; } = true;
-        public bool ShowColDesc { get; set; } = false;
-        public bool ShowColGenre { get; set; } = false;
-        public bool ShowColExtraInfo { get; set; } = false;
-        public bool ShowColEnabled { get; set; } = false;
-        public bool ShowColProgramType { get; set; } = false;
-        public bool ShowColComment { get; set; } = false;
-        public bool ShowColError { get; set; } = false;
-        public bool ShowColRecFileName { get; set; } = false;
-        public bool ShowColRecFileNameList { get; set; } = false;
-        public bool ShowColTuner { get; set; } = false;
-        public bool ShowColEstSize { get; set; } = false;
-        public bool ShowColPreset { get; set; } = false;
-        public bool ShowColRecMode { get; set; } = false;
-        public bool ShowColPriority { get; set; } = false;
-        public bool ShowColTuijyuu { get; set; } = false;
-        public bool ShowColPittari { get; set; } = false;
-        public bool ShowColTunerForce { get; set; } = false;
-        public bool ShowColRecEndMode { get; set; } = false;
-        public bool ShowColReboot { get; set; } = false;
-        public bool ShowColBat { get; set; } = false;
-        public bool ShowColRecTag { get; set; } = false;
-        public bool ShowColRecFolder { get; set; } = false;
-        public bool ShowColStartMargin { get; set; } = false;
-        public bool ShowColEndMargin { get; set; } = false;
         public bool OmitYear { get; set; } = true;
         public bool OmitMonth { get; set; } = false;
         public bool OmitEndTime { get; set; } = false;
-        public bool ShowColID { get; set; } = false;
-
-        // EDCB全31項目幅
-        public double WidthColID { get; set; } = 50;
-        public double WidthColStatus { get; set; } = 60;
-        public double WidthColDateTime { get; set; } = 132;
-        public double WidthColDuration { get; set; } = 31;
-        public double WidthColNetwork { get; set; } = 70;
-        public double WidthColServiceName { get; set; } = 58;
-        public double WidthColTitle { get; set; } = 460;
-        public double WidthColDesc { get; set; } = 150;
-        public double WidthColGenre { get; set; } = 80;
-        public double WidthColExtraInfo { get; set; } = 100;
-        public double WidthColEnabled { get; set; } = 60;
-        public double WidthColProgramType { get; set; } = 80;
-        public double WidthColComment { get; set; } = 150;
-        public double WidthColError { get; set; } = 100;
-        public double WidthColRecFileName { get; set; } = 150;
-        public double WidthColRecFileNameList { get; set; } = 150;
-        public double WidthColTuner { get; set; } = 100;
-        public double WidthColEstSize { get; set; } = 70;
-        public double WidthColPreset { get; set; } = 70;
-        public double WidthColRecMode { get; set; } = 70;
-        public double WidthColPriority { get; set; } = 50;
-        public double WidthColTuijyuu { get; set; } = 50;
-        public double WidthColPittari { get; set; } = 50;
-        public double WidthColTunerForce { get; set; } = 80;
-        public double WidthColRecEndMode { get; set; } = 80;
-        public double WidthColReboot { get; set; } = 50;
-        public double WidthColBat { get; set; } = 100;
-        public double WidthColRecTag { get; set; } = 100;
-        public double WidthColRecFolder { get; set; } = 100;
-        public double WidthColStartMargin { get; set; } = 80;
-        public double WidthColEndMargin { get; set; } = 80;
 
         public string EdcbInstallPath { get => _edcbInstallPath; set => SetProperty(ref _edcbInstallPath, value); }
         public bool Topmost { get => _topmost; set => SetProperty(ref _topmost, value); }

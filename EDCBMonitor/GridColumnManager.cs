@@ -6,13 +6,14 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Collections.Specialized;
+using System.Windows.Threading;
 
-// 型の衝突を避けるための明示的な別名定義
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using ListView = System.Windows.Controls.ListView;
 using Control = System.Windows.Controls.Control;
-using Point = System.Windows.Point; // これで衝突を解消
+using Point = System.Windows.Point;
 
 namespace EDCBMonitor
 {
@@ -22,12 +23,12 @@ namespace EDCBMonitor
         {
             public string Header { get; set; } = "";
             public string BindingPath { get; set; } = "";
-            public Func<bool> GetShow { get; set; } = () => true;
-            public Func<double> GetWidth { get; set; } = () => 100;
         }
 
         private readonly ListView _listView;
         private readonly RoutedEventHandler _checkBoxHandler;
+        private bool _isUpdatingColumns = false;
+        private bool _isSaveQueued = false;
 
         public GridColumnManager(ListView listView, RoutedEventHandler checkBoxHandler)
         {
@@ -38,29 +39,99 @@ namespace EDCBMonitor
         public void UpdateColumns()
         {
             if (_listView.View is not GridView gv) return;
-            gv.Columns.Clear();
 
-            var defs = GetColumnDefinitions();
-            var orderedHeaders = Config.Data.ColumnHeaderOrder ?? new List<string>();
-            var usedHeaders = new HashSet<string>();
+            // 1. データの不足があればデフォルト値で補完
+            Config.Data.InitDefaults();
 
-            foreach (var header in orderedHeaders)
+            _isUpdatingColumns = true;
+            try
             {
-                var d = defs.FirstOrDefault(x => x.Header == header);
-                if (d != null && d.GetShow())
+                gv.Columns.Clear();
+                var defs = GetColumnDefinitions();
+
+                // 2. 設定(Config.Data.Columns)の順序通りに、表示設定がONのものだけを追加
+                foreach (var state in Config.Data.Columns)
                 {
-                    AddColumnByType(gv, d);
-                    usedHeaders.Add(header);
+                    if (state.IsVisible)
+                    {
+                        var d = defs.FirstOrDefault(x => x.Header == state.Header);
+                        if (d != null)
+                        {
+                            AddColumnByType(gv, d, state.Width);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                _isUpdatingColumns = false;
+            }
+
+            if (gv.Columns is INotifyCollectionChanged newCollection)
+            {
+                newCollection.CollectionChanged += Columns_CollectionChanged;
+            }
+        }
+
+        private void Columns_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (_isUpdatingColumns) return;
+
+            // ドラッグ移動(Move)や項目の増減を検知
+            if (e.Action == NotifyCollectionChangedAction.Move ||
+                e.Action == NotifyCollectionChangedAction.Add ||
+                e.Action == NotifyCollectionChangedAction.Remove)
+            {
+                if (_isSaveQueued) return;
+                _isSaveQueued = true;
+
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _isSaveQueued = false;
+                    SaveColumnState();
+                    Config.Save();
+                }), DispatcherPriority.ApplicationIdle);
+            }
+        }
+
+        public void SaveColumnState()
+        {
+            if (_listView.View is not GridView gv) return;
+
+            // 1. 各カラムの幅を保存
+            foreach (var col in gv.Columns)
+            {
+                if (col.Header is string headerText)
+                {
+                    Config.Data.GetColumn(headerText).Width = col.ActualWidth;
                 }
             }
 
-            foreach (var d in defs)
+            // 2. 表示されているカラムの順序を取得
+            var visibleHeaders = gv.Columns.Select(c => c.Header as string).Where(h => h != null).ToList();
+
+            // 3. 全カラムリスト(Config.Data.Columns)を、表示列だけ現在のUIの順序に入れ替えて再構成
+            var currentList = Config.Data.Columns.ToList();
+            var visibleColumnsInMaster = currentList.Where(c => c.IsVisible).OrderBy(c => {
+                int idx = visibleHeaders.IndexOf(c.Header);
+                return idx == -1 ? int.MaxValue : idx;
+            }).ToList();
+
+            var newMaster = new List<ColumnState>();
+            int visibleIdx = 0;
+            foreach (var original in Config.Data.Columns)
             {
-                if (d.GetShow() && !usedHeaders.Contains(d.Header))
+                if (original.IsVisible && visibleIdx < visibleColumnsInMaster.Count)
                 {
-                    AddColumnByType(gv, d);
+                    newMaster.Add(visibleColumnsInMaster[visibleIdx++]);
+                }
+                else if (!original.IsVisible)
+                {
+                    newMaster.Add(original);
                 }
             }
+
+            Config.Data.Columns = newMaster;
         }
 
         public void UpdateHeaderStyle(Brush bg, Brush fg, Brush border, bool? showListHeader = null)
@@ -72,7 +143,6 @@ namespace EDCBMonitor
                 var headerStyle = new Style(typeof(GridViewColumnHeader));
                 headerStyle.Setters.Add(new Setter(Control.FontSizeProperty, Config.Data.HeaderFontSize));
                 
-                // 省略された場合は元の設定(Config.Data.ShowListHeader)を使うように変更
                 bool isListHeaderVisible = showListHeader ?? Config.Data.ShowListHeader;
                 headerStyle.Setters.Add(new Setter(UIElement.VisibilityProperty, isListHeaderVisible ? Visibility.Visible : Visibility.Collapsed));
                 headerStyle.Setters.Add(new Setter(Control.BackgroundProperty, bg));
@@ -98,85 +168,62 @@ namespace EDCBMonitor
             catch (Exception ex) { Logger.Write($"Header Style Error: {ex.Message}"); }
         }
 
-        public void SaveColumnState()
-        {
-            if (_listView.View is not GridView gv) return;
-
-            Config.Data.ColumnHeaderOrder.Clear();
-            foreach (var col in gv.Columns)
-            {
-                if (col.Header is string headerText)
-                {
-                    Config.Data.ColumnHeaderOrder.Add(headerText);
-                }
-            }
-
-            foreach (var col in gv.Columns)
-            {
-                if (col.Header is not string header) continue;
-                double w = col.ActualWidth;
-                SaveColumnWidth(header, w);
-            }
-        }
-
         private List<ColumnDef> GetColumnDefinitions()
         {
             return new List<ColumnDef>
             {
-                new() { Header = "状態", BindingPath = "Status", GetShow = () => Config.Data.ShowColStatus, GetWidth = () => Config.Data.WidthColStatus },
-                new() { Header = "日時", BindingPath = "DateTimeInfo", GetShow = () => Config.Data.ShowColDateTime, GetWidth = () => Config.Data.WidthColDateTime },
-                new() { Header = "長さ", BindingPath = "Duration", GetShow = () => Config.Data.ShowColDuration, GetWidth = () => Config.Data.WidthColDuration },
-                new() { Header = "ネットワーク", BindingPath = "NetworkName", GetShow = () => Config.Data.ShowColNetwork, GetWidth = () => Config.Data.WidthColNetwork },
-                new() { Header = "サービス名", BindingPath = "ServiceName", GetShow = () => Config.Data.ShowColServiceName, GetWidth = () => Config.Data.WidthColServiceName },
-                new() { Header = "番組名", BindingPath = "Title", GetShow = () => Config.Data.ShowColTitle, GetWidth = () => Config.Data.WidthColTitle },
-                new() { Header = "番組内容", BindingPath = "Desc", GetShow = () => Config.Data.ShowColDesc, GetWidth = () => Config.Data.WidthColDesc },
-                new() { Header = "ジャンル", BindingPath = "Genre", GetShow = () => Config.Data.ShowColGenre, GetWidth = () => Config.Data.WidthColGenre },
-                new() { Header = "付属情報", BindingPath = "ExtraInfo", GetShow = () => Config.Data.ShowColExtraInfo, GetWidth = () => Config.Data.WidthColExtraInfo },
-                new() { Header = "有効", BindingPath = "IsEnabled", GetShow = () => Config.Data.ShowColEnabled, GetWidth = () => Config.Data.WidthColEnabled },
-                new() { Header = "プログラム予約", BindingPath = "ProgramType", GetShow = () => Config.Data.ShowColProgramType, GetWidth = () => Config.Data.WidthColProgramType },
-                new() { Header = "予約状況", BindingPath = "Comment", GetShow = () => Config.Data.ShowColComment, GetWidth = () => Config.Data.WidthColComment },
-                new() { Header = "エラー状況", BindingPath = "ErrorInfo", GetShow = () => Config.Data.ShowColError, GetWidth = () => Config.Data.WidthColError },
-                new() { Header = "予定ファイル名", BindingPath = "RecFileName", GetShow = () => Config.Data.ShowColRecFileName, GetWidth = () => Config.Data.WidthColRecFileName },
-                new() { Header = "予定ファイル名リスト", BindingPath = "RecFileNameList", GetShow = () => Config.Data.ShowColRecFileNameList, GetWidth = () => Config.Data.WidthColRecFileNameList },
-                new() { Header = "使用予定チューナー", BindingPath = "Tuner", GetShow = () => Config.Data.ShowColTuner, GetWidth = () => Config.Data.WidthColTuner },
-                new() { Header = "予想サイズ", BindingPath = "EstimatedSize", GetShow = () => Config.Data.ShowColEstSize, GetWidth = () => Config.Data.WidthColEstSize },
-                new() { Header = "プリセット", BindingPath = "Preset", GetShow = () => Config.Data.ShowColPreset, GetWidth = () => Config.Data.WidthColPreset },
-                new() { Header = "録画モード", BindingPath = "RecMode", GetShow = () => Config.Data.ShowColRecMode, GetWidth = () => Config.Data.WidthColRecMode },
-                new() { Header = "優先度", BindingPath = "Priority", GetShow = () => Config.Data.ShowColPriority, GetWidth = () => Config.Data.WidthColPriority },
-                new() { Header = "追従", BindingPath = "Tuijyuu", GetShow = () => Config.Data.ShowColTuijyuu, GetWidth = () => Config.Data.WidthColTuijyuu },
-                new() { Header = "ぴったり", BindingPath = "Pittari", GetShow = () => Config.Data.ShowColPittari, GetWidth = () => Config.Data.WidthColPittari },
-                new() { Header = "チューナー強制", BindingPath = "TunerForce", GetShow = () => Config.Data.ShowColTunerForce, GetWidth = () => Config.Data.WidthColTunerForce },
-                new() { Header = "録画後動作", BindingPath = "RecEndMode", GetShow = () => Config.Data.ShowColRecEndMode, GetWidth = () => Config.Data.WidthColRecEndMode },
-                new() { Header = "復帰後再起動", BindingPath = "Reboot", GetShow = () => Config.Data.ShowColReboot, GetWidth = () => Config.Data.WidthColReboot },
-                new() { Header = "録画後実行bat", BindingPath = "Bat", GetShow = () => Config.Data.ShowColBat, GetWidth = () => Config.Data.WidthColBat },
-                new() { Header = "録画タグ", BindingPath = "RecTag", GetShow = () => Config.Data.ShowColRecTag, GetWidth = () => Config.Data.WidthColRecTag },
-                new() { Header = "録画フォルダ", BindingPath = "RecFolder", GetShow = () => Config.Data.ShowColRecFolder, GetWidth = () => Config.Data.WidthColRecFolder },
-                new() { Header = "開始", BindingPath = "StartMargin", GetShow = () => Config.Data.ShowColStartMargin, GetWidth = () => Config.Data.WidthColStartMargin },
-                new() { Header = "終了", BindingPath = "EndMargin", GetShow = () => Config.Data.ShowColEndMargin, GetWidth = () => Config.Data.WidthColEndMargin },
-                new() { Header = "ID", BindingPath = "ID", GetShow = () => Config.Data.ShowColID, GetWidth = () => Config.Data.WidthColID }
+                new() { Header = "状態", BindingPath = "Status" },
+                new() { Header = "日時", BindingPath = "DateTimeInfo" },
+                new() { Header = "長さ", BindingPath = "Duration" },
+                new() { Header = "ネットワーク", BindingPath = "NetworkName" },
+                new() { Header = "サービス名", BindingPath = "ServiceName" },
+                new() { Header = "番組名", BindingPath = "Title" },
+                new() { Header = "番組内容", BindingPath = "Desc" },
+                new() { Header = "ジャンル", BindingPath = "Genre" },
+                new() { Header = "付属情報", BindingPath = "ExtraInfo" },
+                new() { Header = "有効", BindingPath = "IsEnabled" },
+                new() { Header = "プログラム予約", BindingPath = "ProgramType" },
+                new() { Header = "予約状況", BindingPath = "Comment" },
+                new() { Header = "エラー状況", BindingPath = "ErrorInfo" },
+                new() { Header = "予定ファイル名", BindingPath = "RecFileName" },
+                new() { Header = "予定ファイル名リスト", BindingPath = "RecFileNameList" },
+                new() { Header = "使用予定チューナー", BindingPath = "Tuner" },
+                new() { Header = "予想サイズ", BindingPath = "EstimatedSize" },
+                new() { Header = "プリセット", BindingPath = "Preset" },
+                new() { Header = "録画モード", BindingPath = "RecMode" },
+                new() { Header = "優先度", BindingPath = "Priority" },
+                new() { Header = "追従", BindingPath = "Tuijyuu" },
+                new() { Header = "ぴったり", BindingPath = "Pittari" },
+                new() { Header = "チューナー強制", BindingPath = "TunerForce" },
+                new() { Header = "録画後動作", BindingPath = "RecEndMode" },
+                new() { Header = "復帰後再起動", BindingPath = "Reboot" },
+                new() { Header = "録画後実行bat", BindingPath = "Bat" },
+                new() { Header = "録画タグ", BindingPath = "RecTag" },
+                new() { Header = "録画フォルダ", BindingPath = "RecFolder" },
+                new() { Header = "開始", BindingPath = "StartMargin" },
+                new() { Header = "終了", BindingPath = "EndMargin" },
+                new() { Header = "ID", BindingPath = "ID" }
             };
         }
 
-        private void AddColumnByType(GridView gv, ColumnDef d)
+        private void AddColumnByType(GridView gv, ColumnDef d, double width)
         {
             switch (d.Header)
             {
-                case "有効": AddCheckBoxColumn(gv, d); break;
-                case "日時": AddDateTimeColumn(gv, d); break;
-                case "長さ": AddDurationColumn(gv, d); break;
-                case "サービス名": AddServiceNameColumn(gv, d); break; // 追加
-                default: AddColumn(gv, d); break;
+                case "有効": AddCheckBoxColumn(gv, d, width); break;
+                case "日時": AddDateTimeColumn(gv, d, width); break;
+                case "長さ": AddDurationColumn(gv, d, width); break;
+                case "サービス名": AddServiceNameColumn(gv, d, width); break;
+                default: AddColumn(gv, d, width); break;
             }
         }
 
-        // サービス名（ロゴ/テキスト切替）専用の列生成メソッドを追加
-        private void AddServiceNameColumn(GridView gv, ColumnDef d)
+        private void AddServiceNameColumn(GridView gv, ColumnDef d, double width)
         {
             var dataTemplate = new DataTemplate();
             var gridFactory = new FrameworkElementFactory(typeof(Grid));
             gridFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(2, Config.Data.ItemPadding, -6, Config.Data.ItemPadding));
 
-            // --- 画像（局ロゴ）---
             var imgFactory = new FrameworkElementFactory(typeof(System.Windows.Controls.Image));
             imgFactory.SetBinding(System.Windows.Controls.Image.SourceProperty, new System.Windows.Data.Binding("ServiceLogo"));
             imgFactory.SetBinding(UIElement.VisibilityProperty, new System.Windows.Data.Binding("ServiceLogoVisibility"));
@@ -185,7 +232,6 @@ namespace EDCBMonitor
             imgFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Left);
             imgFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
 
-            // --- テキスト（サービス名）---
             var txtFactory = new FrameworkElementFactory(typeof(TextBlock));
             txtFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(d.BindingPath));
             txtFactory.SetBinding(UIElement.VisibilityProperty, new System.Windows.Data.Binding("ServiceNameVisibility"));
@@ -197,25 +243,23 @@ namespace EDCBMonitor
             gridFactory.AppendChild(txtFactory);
 
             dataTemplate.VisualTree = gridFactory;
-            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = d.GetWidth(), CellTemplate = dataTemplate });
+            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = width, CellTemplate = dataTemplate });
         }
 
-        private void AddColumn(GridView gv, ColumnDef d)
+        private void AddColumn(GridView gv, ColumnDef d, double width)
         {
             var dataTemplate = new DataTemplate();
             var factory = new FrameworkElementFactory(typeof(TextBlock));
             factory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(d.BindingPath));
             factory.SetValue(TextBlock.MarginProperty, new Thickness(2, Config.Data.ItemPadding, -6, Config.Data.ItemPadding));
-            
             factory.SetValue(TextBlock.TextWrappingProperty, TextWrapping.NoWrap);
             factory.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.None);
             
             dataTemplate.VisualTree = factory;
-
-            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = d.GetWidth(), CellTemplate = dataTemplate });
+            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = width, CellTemplate = dataTemplate });
         }
 
-        private void AddCheckBoxColumn(GridView gv, ColumnDef d)
+        private void AddCheckBoxColumn(GridView gv, ColumnDef d, double width)
         {
             var dataTemplate = new DataTemplate();
             var factory = new FrameworkElementFactory(typeof(System.Windows.Controls.CheckBox));
@@ -223,12 +267,12 @@ namespace EDCBMonitor
             factory.SetValue(FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
             factory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
             factory.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, _checkBoxHandler);
+            
             dataTemplate.VisualTree = factory;
-
-            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = d.GetWidth(), CellTemplate = dataTemplate });
+            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = width, CellTemplate = dataTemplate });
         }
 
-        private void AddDateTimeColumn(GridView gv, ColumnDef d)
+        private void AddDateTimeColumn(GridView gv, ColumnDef d, double width)
         {
             var dataTemplate = new DataTemplate();
             var gridFactory = new FrameworkElementFactory(typeof(Grid));
@@ -246,8 +290,7 @@ namespace EDCBMonitor
                 {
                     if (System.Windows.Media.ColorConverter.ConvertFromString(Config.Data.ProgressBarBackColor) is Color backColor)
                         progressFactory.SetValue(Control.BackgroundProperty, new SolidColorBrush(backColor));
-                }
-                catch { }
+                } catch { }
 
                 try
                 {
@@ -255,8 +298,7 @@ namespace EDCBMonitor
                         progressFactory.SetValue(Control.ForegroundProperty, new SolidColorBrush(color));
                     else
                         progressFactory.SetValue(Control.ForegroundProperty, new SolidColorBrush(System.Windows.Media.Color.FromArgb(255, 0, 255, 0)));
-                }
-                catch { }
+                } catch { }
 
                 progressFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(2, 0, -6, 0));
                 progressFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Stretch);
@@ -278,13 +320,13 @@ namespace EDCBMonitor
             textFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(d.BindingPath));
             textFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
             textFactory.SetValue(FrameworkElement.MarginProperty, new Thickness(2, Config.Data.ItemPadding, -6, Config.Data.ItemPadding));
+            
             gridFactory.AppendChild(textFactory);
-
             dataTemplate.VisualTree = gridFactory;
-            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = d.GetWidth(), CellTemplate = dataTemplate });
+            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = width, CellTemplate = dataTemplate });
         }
 
-        private void AddDurationColumn(GridView gv, ColumnDef d)
+        private void AddDurationColumn(GridView gv, ColumnDef d, double width)
         {
             var dataTemplate = new DataTemplate();
             var stackFactory = new FrameworkElementFactory(typeof(StackPanel));
@@ -306,7 +348,7 @@ namespace EDCBMonitor
             stackFactory.AppendChild(txtM);
 
             dataTemplate.VisualTree = stackFactory;
-            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = d.GetWidth(), CellTemplate = dataTemplate });
+            gv.Columns.Add(new GridViewColumn { Header = d.Header, Width = width, CellTemplate = dataTemplate });
         }
 
         private ContextMenu CreateHeaderContextMenu()
@@ -317,15 +359,11 @@ namespace EDCBMonitor
             {
                 var item = new MenuItem { Header = header, IsCheckable = true, IsChecked = current };
                 item.Click += (s, e) => {
-                    // UI再構築前に現在のカラム幅を保存する
                     SaveColumnState();
-                    
                     setAction(item.IsChecked);
-                    // カラムの状態が変わったので設定を保存
                     Config.Save(); 
                     
                     System.Windows.Application.Current.MainWindow.Dispatcher.Invoke(() => {
-                        // サイズ変更(updateSize)を伴わずに設定を再適用する
                         (System.Windows.Application.Current.MainWindow as MainWindow)?.ApplySettings(false);
                     });
                 };
@@ -373,44 +411,6 @@ namespace EDCBMonitor
             AddItem("ID", Config.Data.ShowColID, v => Config.Data.ShowColID = v);
 
             return menu;
-        }
-
-        private void SaveColumnWidth(string header, double width)
-        {
-            switch (header)
-            {
-                case "ID": Config.Data.WidthColID = width; break;
-                case "状態": Config.Data.WidthColStatus = width; break;
-                case "日時": Config.Data.WidthColDateTime = width; break;
-                case "長さ": Config.Data.WidthColDuration = width; break;
-                case "ネットワーク": Config.Data.WidthColNetwork = width; break;
-                case "サービス名": Config.Data.WidthColServiceName = width; break;
-                case "番組名": Config.Data.WidthColTitle = width; break;
-                case "番組内容": Config.Data.WidthColDesc = width; break;
-                case "ジャンル": Config.Data.WidthColGenre = width; break;
-                case "付属情報": Config.Data.WidthColExtraInfo = width; break;
-                case "有効": Config.Data.WidthColEnabled = width; break;
-                case "プログラム予約": Config.Data.WidthColProgramType = width; break;
-                case "予約状況": Config.Data.WidthColComment = width; break;
-                case "エラー状況": Config.Data.WidthColError = width; break;
-                case "予定ファイル名": Config.Data.WidthColRecFileName = width; break;
-                case "予定ファイル名リスト": Config.Data.WidthColRecFileNameList = width; break;
-                case "使用予定チューナー": Config.Data.WidthColTuner = width; break;
-                case "予想サイズ": Config.Data.WidthColEstSize = width; break;
-                case "プリセット": Config.Data.WidthColPreset = width; break;
-                case "録画モード": Config.Data.WidthColRecMode = width; break;
-                case "優先度": Config.Data.WidthColPriority = width; break;
-                case "追従": Config.Data.WidthColTuijyuu = width; break;
-                case "ぴったり": Config.Data.WidthColPittari = width; break;
-                case "チューナー強制": Config.Data.WidthColTunerForce = width; break;
-                case "録画後動作": Config.Data.WidthColRecEndMode = width; break;
-                case "復帰後再起動": Config.Data.WidthColReboot = width; break;
-                case "録画後実行bat": Config.Data.WidthColBat = width; break;
-                case "録画タグ": Config.Data.WidthColRecTag = width; break;
-                case "録画フォルダ": Config.Data.WidthColRecFolder = width; break;
-                case "開始": Config.Data.WidthColStartMargin = width; break;
-                case "終了": Config.Data.WidthColEndMargin = width; break;
-            }
         }
     }
 }

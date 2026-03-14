@@ -225,7 +225,7 @@
                                         <CheckBox Name="ChkShowHeader" Content="ヘッダー" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" Click="Interact_Changed"/>
                                         <CheckBox Name="ChkShowListHeader" Content="リスト見出し" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" Click="Interact_Changed"/>
                                         <CheckBox Name="ChkShowFooter" Content="フッター" Foreground="White" Margin="0,0,15,0" VerticalAlignment="Center" Click="Interact_Changed"/>
-                                        <CheckBox Name="ChkShowServiceLogo" Content="サービス名に局ロゴを表示する" Foreground="White" VerticalAlignment="Center" Click="DataSetting_Changed"/>
+                                        <CheckBox Name="ChkShowServiceLogo" Content="サービス名を局ロゴにする" Foreground="White" VerticalAlignment="Center" Click="DataSetting_Changed"/>
                                     </StackPanel>
 
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="フォント" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,15,0"/>
