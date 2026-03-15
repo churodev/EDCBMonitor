@@ -51,13 +51,13 @@ namespace EDCBMonitor
         public int MiniModeExpandDelay { get => _miniModeExpandDelay; set => SetProperty(ref _miniModeExpandDelay, value); }
 
         // ミニモード用のリスト余白設定
-        private double _miniListMarginLeft = 5;
+        private double _miniListMarginLeft = 3;
         public double MiniListMarginLeft { get => _miniListMarginLeft; set { if (SetProperty(ref _miniListMarginLeft, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
-        private double _miniListMarginTop = 5;
+        private double _miniListMarginTop = 6;
         public double MiniListMarginTop { get => _miniListMarginTop; set { if (SetProperty(ref _miniListMarginTop, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
         private double _miniListMarginRight = 0;
         public double MiniListMarginRight { get => _miniListMarginRight; set { if (SetProperty(ref _miniListMarginRight, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
-        private double _miniListMarginBottom = 10;
+        private double _miniListMarginBottom = 6;
         public double MiniListMarginBottom { get => _miniListMarginBottom; set { if (SetProperty(ref _miniListMarginBottom, value)) OnPropertyChanged(nameof(MiniListMargin)); } }
         [XmlIgnore] public Thickness MiniListMargin => new Thickness(_miniListMarginLeft, _miniListMarginTop, _miniListMarginRight, _miniListMarginBottom);
         private string _backgroundColor = "#1E1E1E";
@@ -75,6 +75,11 @@ namespace EDCBMonitor
         private string _footerColor = "#888888";
         private string _mainBorderColor = "#555555";
         private bool _recBold = true;
+
+        private string _selectedColor = "#50FFFFFF";
+        public string SelectedColor { get => _selectedColor; set => SetProperty(ref _selectedColor, value); }
+        private string _hoverColor = "#32FFFFFF";
+        public string HoverColor { get => _hoverColor; set => SetProperty(ref _hoverColor, value); }
 
         private string _fontFamily = "Yu Gothic UI";
         private double _fontSize = 12.0;
@@ -115,7 +120,7 @@ namespace EDCBMonitor
         public double Top { get; set; } = -10000;
         public double Left { get; set; } = -10000;
         public double Width { get; set; } = 660;
-        public double Height { get; set; } = 477;
+        public double Height { get; set; } = 478;
         public bool IsVerticalMaximized { get; set; } = false;
         public double RestoreTop { get; set; } = -10000;
         public double RestoreHeight { get; set; } = 500;
@@ -260,7 +265,7 @@ namespace EDCBMonitor
         public double HeaderFontSize { get => _headerFontSize; set => SetProperty(ref _headerFontSize, value); }
         public double FooterFontSize { get => _footerFontSize; set => SetProperty(ref _footerFontSize, value); }
         
-        private double _serviceLogoHeight = 16.0;
+        private double _serviceLogoHeight = 14.0;
         public double ServiceLogoHeight { get => _serviceLogoHeight; set => SetProperty(ref _serviceLogoHeight, value); }
         
         public double ItemPadding { get => _itemPadding; set => SetProperty(ref _itemPadding, value); }

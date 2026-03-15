@@ -58,13 +58,13 @@ namespace EDCBMonitor
         }
 
         // WPFのルーティングイベント用ハンドラ（ウィンドウ全体で一括監視）
-        private void GlobalContextMenu_Opened(object sender, RoutedEventArgs e)
+        private void GlobalContextMenu_Opening(object sender, ContextMenuEventArgs e)
         {
             _isContextMenuOpen = true;
         }
 
-        // ウィンドウ内のすべてのContextMenuが閉じた時に開始する
-        private void GlobalContextMenu_Closed(object sender, RoutedEventArgs e)
+        // ウィンドウ内のすべてのContextMenuが閉じる時に開始する
+        private void GlobalContextMenu_Closing(object sender, ContextMenuEventArgs e)
         {
             _isContextMenuOpen = false;
             if (!IsMouseOver)

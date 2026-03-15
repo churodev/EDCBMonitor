@@ -70,6 +70,8 @@ namespace EDCBMonitor
             TxtErrorColor.Text = Config.Data.ReserveErrorColor;
             TxtProgressBarColor.Text = Config.Data.ProgressBarColor;
             TxtProgressBarBackColor.Text = Config.Data.ProgressBarBackColor;
+            TxtSelectedColor.Text = Config.Data.SelectedColor;
+            TxtHoverColor.Text = Config.Data.HoverColor;
             TxtFontSize.Text = Config.Data.FontSize.ToString();
             TxtHeaderFontSize.Text = Config.Data.HeaderFontSize.ToString();
             TxtFooterFontSize.Text = Config.Data.FooterFontSize.ToString();
@@ -197,6 +199,8 @@ namespace EDCBMonitor
             Config.Data.ReserveErrorColor = TxtErrorColor.Text;
             Config.Data.ProgressBarColor = TxtProgressBarColor.Text;
             Config.Data.ProgressBarBackColor = TxtProgressBarBackColor.Text;
+            Config.Data.SelectedColor = TxtSelectedColor.Text;
+            Config.Data.HoverColor = TxtHoverColor.Text;
             Config.Data.EnableTitleRemove = ChkEnableTitleRemove.IsChecked == true;
             Config.Data.TitleRemovePattern = TxtTitleRemovePattern.Text;
             
@@ -383,6 +387,8 @@ namespace EDCBMonitor
             TxtToolTipBorderColor.Text = "#767676";
             TxtProgressBarBackColor.Text = "#A9A9A9";
             TxtRecColor.Text = "#FF5555";
+            TxtSelectedColor.Text = "#50FFFFFF";
+            TxtHoverColor.Text = "#32FFFFFF";
             UpdatePreview(false);
         }
 
@@ -402,6 +408,8 @@ namespace EDCBMonitor
             TxtToolTipBorderColor.Text = "#7A7A7A";
             TxtProgressBarBackColor.Text = "#E6E6E6";
             TxtRecColor.Text = "#FF0000";
+            TxtSelectedColor.Text = "#640064C8";
+            TxtHoverColor.Text = "#320064C8";
             UpdatePreview(false);
         }
 
@@ -458,5 +466,7 @@ namespace EDCBMonitor
         private void BtnPickToolTipFg_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipFgColor);
         private void BtnPickToolTipBorder_Click(object sender, RoutedEventArgs e) => PickColor(TxtToolTipBorderColor);
         private void BtnPickBtnColor_Click(object sender, RoutedEventArgs e) => PickColor(TxtBtnColor);
+        private void BtnPickSelected_Click(object sender, RoutedEventArgs e) => PickColor(TxtSelectedColor);
+        private void BtnPickHover_Click(object sender, RoutedEventArgs e) => PickColor(TxtHoverColor);
     }
 }

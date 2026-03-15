@@ -154,9 +154,10 @@ namespace EDCBMonitor
                 toolTipStyle.Setters.Add(new Setter(System.Windows.Controls.ContentControl.ContentTemplateProperty, ttTemplate));
                 Resources[typeof(System.Windows.Controls.ToolTip)] = toolTipStyle;
 
-                var itemStyle = new Style(typeof(System.Windows.Controls.ListViewItem));
-                itemStyle.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
-                
+                // XAMLに定義した骨組み(BaseItemStyle)を取得し、継承(BasedOn)して色を乗せる
+                var baseStyle = LstReservations.TryFindResource("BaseItemStyle") as Style;
+                var itemStyle = new Style(typeof(System.Windows.Controls.ListViewItem), baseStyle);
+
                 if (Config.Data.ShowToolTip)
                 {
                     itemStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new System.Windows.Data.Binding("ToolTipText")));
@@ -207,17 +208,20 @@ namespace EDCBMonitor
                 }
                 catch { }
 
-                double brightness = bgBrush.Color.R * 0.299 + bgBrush.Color.G * 0.587 + bgBrush.Color.B * 0.114;
-                bool isLight = brightness > 128; 
                 var selectedTrigger = new Trigger { Property = System.Windows.Controls.ListViewItem.IsSelectedProperty, Value = true };
-                var selColor = System.Windows.Media.Color.FromArgb(100, 0, 100, 200);
-                if (!isLight) selColor = System.Windows.Media.Color.FromArgb(80, 255, 255, 255);
-                selectedTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, new SolidColorBrush(selColor)));
+                try
+                {
+                    if (brushConverter.ConvertFromString(Config.Data.SelectedColor) is SolidColorBrush selBrush)
+                        selectedTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, selBrush));
+                } catch { }
                 itemStyle.Triggers.Add(selectedTrigger);
 
                 var mouseOverTrigger = new Trigger { Property = System.Windows.UIElement.IsMouseOverProperty, Value = true };
-                var hoverColor = isLight ? System.Windows.Media.Color.FromArgb(50, 0, 100, 200) : System.Windows.Media.Color.FromArgb(50, 255, 255, 255);
-                mouseOverTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, new SolidColorBrush(hoverColor)));
+                try
+                {
+                    if (brushConverter.ConvertFromString(Config.Data.HoverColor) is SolidColorBrush hoverBrush)
+                        mouseOverTrigger.Setters.Add(new Setter(System.Windows.Controls.Control.BackgroundProperty, hoverBrush));
+                } catch { }
                 itemStyle.Triggers.Add(mouseOverTrigger);
 
                 LstReservations.ItemContainerStyle = itemStyle;

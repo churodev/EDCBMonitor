@@ -446,18 +446,19 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="70"/>
                                 <ColumnDefinition Width="30"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="70"/>
                                 <ColumnDefinition Width="30"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="70"/>
                                 <ColumnDefinition Width="30"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="30"/>
                                 <RowDefinition Height="30"/>
                                 <RowDefinition Height="30"/>
                                 <RowDefinition Height="30"/>
@@ -516,13 +517,21 @@
                             <TextBox Grid.Row="4" Grid.Column="1" Name="TxtMainBorderColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
                             <Button Grid.Row="4" Grid.Column="2" Content="🎨" Click="BtnPickMainBorder_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
 
-                            <TextBlock Grid.Row="4" Grid.Column="4" Text="ボタン色" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBox Grid.Row="4" Grid.Column="5" Name="TxtBtnColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
-                            <Button Grid.Row="4" Grid.Column="6" Content="🎨" Click="BtnPickBtnColor_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+                            <TextBlock Grid.Row="4" Grid.Column="4" Text="Mオーバー行" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBox Grid.Row="4" Grid.Column="5" Name="TxtHoverColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                            <Button Grid.Row="4" Grid.Column="6" Content="🎨" Click="BtnPickHover_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
 
                             <TextBlock Grid.Row="4" Grid.Column="8" Text="進捗B背景" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,5,0"/>
                             <TextBox Grid.Row="4" Grid.Column="9" Name="TxtProgressBarBackColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
                             <Button Grid.Row="4" Grid.Column="10" Content="🎨" Click="BtnPickProgressBarBack_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="ボタン色" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBox Grid.Row="5" Grid.Column="1" Name="TxtBtnColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                            <Button Grid.Row="5" Grid.Column="2" Content="🎨" Click="BtnPickBtnColor_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="4" Text="M選択行" Foreground="#BBB" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBox Grid.Row="5" Grid.Column="5" Name="TxtSelectedColor" Background="#1E1E1E" Foreground="White" BorderBrush="#555" Height="22" VerticalContentAlignment="Center" TextChanged="Interact_Changed"/>
+                            <Button Grid.Row="5" Grid.Column="6" Content="🎨" Click="BtnPickSelected_Click" Background="#444" Foreground="White" BorderThickness="0" Height="22" Margin="6,0,0,0"/>
                         </Grid>
                             </Border>
                         </StackPanel>

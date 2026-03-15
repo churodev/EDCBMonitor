@@ -150,38 +150,6 @@
              <Style x:Key="HiddenHeaderStyle" TargetType="{x:Type GridViewColumnHeader}">
                  <Setter Property="Visibility" Value="Collapsed" />
              </Style>
-
-             <Style x:Key="ReservationItemStyle" TargetType="ListViewItem">
-                 <Setter Property="Background" Value="Transparent" />
-                 
-                 <Setter Property="BorderThickness" Value="0,0,1,1" /> 
-                 <Setter Property="BorderBrush" Value="{DynamicResource ColumnBorderBrush}" />
-                 
-                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                 
-                 <EventSetter Event="MouseDoubleClick" Handler="listView_MouseDoubleClick"/>
-
-                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding HasError}" Value="True">
-                        <Setter Property="Background" Value="{Binding Source={x:Static local:Config.Data}, Path=ReserveErrorColor}" />
-                    </DataTrigger>
-
-                    <DataTrigger Binding="{Binding IsDisabled}" Value="True">
-                        <Setter Property="Foreground" Value="{DynamicResource DisabledBrush}" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding IsRecording}" Value="True">
-                        <Setter Property="FontWeight" Value="{DynamicResource RecWeight}" />
-                        <Setter Property="Foreground" Value="{DynamicResource RecBrush}" />
-                    </DataTrigger>
-           
-                    <Trigger Property="IsSelected" Value="True">
-                         <Setter Property="Background" Value="Transparent" />
-                    </Trigger>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="Background" Value="#33FFFFFF" />
-                    </Trigger>
-                 </Style.Triggers>
-             </Style>
         </Border.Resources>
 
         <Border.ContextMenu>
@@ -224,8 +192,33 @@
                 </StackPanel>
             </Grid>
 
-            <ListView Name="LstReservations" Grid.Row="1" Background="Transparent" BorderThickness="0" Foreground="#EEEEEE" 
-                      Margin="10,0,0,0" Padding="0">
+            <ListView Name="LstReservations" Grid.Row="1" Background="Transparent" BorderThickness="0" Foreground="#EEEEEE" Margin="10,0,0,0" Padding="0">
+                <ListView.Resources>
+                    <Style x:Key="BaseItemStyle" TargetType="{x:Type ListViewItem}">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="0,0,1,1" /> 
+                        <Setter Property="BorderBrush" Value="{DynamicResource ColumnBorderBrush}" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
+
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="{x:Type ListViewItem}">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            SnapsToDevicePixels="true">
+                                        <GridViewRowPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        
+                        <EventSetter Event="MouseDoubleClick" Handler="listView_MouseDoubleClick"/>
+                    </Style>
+                </ListView.Resources>
+                
                 <ListView.View>
                     <GridView x:Name="MainGridView">
                     </GridView>
