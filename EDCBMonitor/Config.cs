@@ -83,7 +83,7 @@ namespace EDCBMonitor
 
         private string _fontFamily = "Yu Gothic UI";
         private double _fontSize = 12.0;
-        private double _itemPadding = 0.0;
+        private double _itemPadding = 1.0;
         private double _headerFontSize = 12.0;
         private double _footerFontSize = 11.0;
         private double _listMarginLeft = 10;
@@ -120,7 +120,7 @@ namespace EDCBMonitor
         public double Top { get; set; } = -10000;
         public double Left { get; set; } = -10000;
         public double Width { get; set; } = 660;
-        public double Height { get; set; } = 478;
+        public double Height { get; set; } = 463;
         public bool IsVerticalMaximized { get; set; } = false;
         public double RestoreTop { get; set; } = -10000;
         public double RestoreHeight { get; set; } = 500;
