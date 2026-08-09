@@ -158,16 +158,16 @@
                 <MenuItem Header="削除" Click="MenuDel_Click"/>
                 <MenuItem Header="番組詳細をウィンドウ表示" Click="MenuShowDetail_Click"/>
                 <Separator/>
-                <MenuItem Header="EpgTimer を開く" Click="MenuOpenEpgTimer_Click"/>
-                <MenuItem Header="WebUI を開く" Click="MenuOpenWebUI_Click"/>
-                <Separator/>
-                <MenuItem Name="MenuItemHideDisabled" Header="無効予約を表示しない" Click="MenuHideDisabled_Click"/>
-                <Separator/>
-                <MenuItem Name="MenuItemVerticalMax" Header="上下最大化にする" Click="BtnVerticalMaximize_Click"/>
-                <MenuItem Header="再読み込み" Click="MenuReload_Click"/>
-                <MenuItem Name="MenuItemOpenFolder" Header="録画フォルダを開く" Click="MenuOpenFolder_Click"/>
                 <MenuItem Name="MenuItemPlay" Header="追っかけ再生" Click="MenuPlay_Click" Visibility="Collapsed"/>
                 <Separator Name="SepPlay" Visibility="Collapsed"/>
+                <MenuItem Header="EpgTimer を開く" Click="MenuOpenEpgTimer_Click"/>
+                <MenuItem Header="WebUI を開く" Click="MenuOpenWebUI_Click"/>
+                <MenuItem Name="MenuItemOpenFolder" Header="録画フォルダを開く" Click="MenuOpenFolder_Click"/>
+                <Separator/>
+                <MenuItem Name="MenuItemHideDisabled" Header="無効予約を表示しない" Click="MenuHideDisabled_Click"/>
+                <MenuItem Name="MenuItemVerticalMax" Header="上下最大化にする" Click="BtnVerticalMaximize_Click"/>
+                <MenuItem Header="再読み込み" Click="MenuReload_Click"/>
+                <Separator/>
                 <MenuItem Header="設定" Click="MenuSettings_Click"/>
                 <MenuItem Header="終了" Click="MenuExit_Click"/>
             </ContextMenu>
